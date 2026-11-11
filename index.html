@@ -3,66 +3,49 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#15131b" />
-    <meta name="description" content="AutoMix Party is a limited-source browser prototype for effortless party music." />
-    <title>AutoMix Party — Set the vibe</title>
+    <meta name="theme-color" content="#0b0d10" />
+    <meta name="description" content="AutoMix Party is a two-deck browser console that keeps the music moving." />
+    <title>AutoMix Party — Console</title>
     <link rel="stylesheet" href="./styles.css" />
     <script type="module" src="./src/app.js"></script>
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <a class="brand" href="#top" aria-label="AutoMix Party home"><span class="brand-mark" aria-hidden="true">✳</span><span>automix<span class="brand-period">.</span></span></a>
-        <span class="topbar-tag">EARLY AUDIO PROTOTYPE <span class="tag-dot"></span> v0.1</span>
+        <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>AUTO<span class="brand-accent">MIX</span><small>PARTY CONSOLE</small></span></div>
+        <div class="topbar-center"><span class="live-dot" aria-hidden="true"></span><span id="session-status">STANDBY</span><span class="top-divider"></span><span id="track-count">0 TRACKS</span></div>
+        <div class="topbar-actions"><button id="demo-button" class="top-button" type="button">Load demo</button><button id="file-button" class="top-button" type="button">Add files</button><input id="file-input" type="file" accept=".mp3,.wav,audio/mpeg,audio/wav,audio/x-wav" multiple hidden /><button id="library-button" class="top-button top-button-strong" type="button" aria-expanded="false" aria-controls="music-panel">Music <span aria-hidden="true">▥</span></button></div>
       </header>
 
-      <main id="top">
-        <section class="intro" aria-labelledby="intro-title">
-          <div class="eyebrow"><span class="eyebrow-line"></span> MUSIC THAT TAKES CARE OF ITSELF</div>
-          <div class="intro-grid">
-            <div>
-              <h1 id="intro-title">Set the vibe.<br /><em>Enjoy the party.</em></h1>
-              <p class="intro-copy">Choose your music, press play, and let the next track find its way in. This first prototype mixes audio on your laptop using demo sounds or your own local MP3 and WAV files.</p>
-            </div>
-            <div class="intro-orbit" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="orbit-core">A<span>↗</span></div></div>
-          </div>
-        </section>
+      <section class="command-bar" aria-label="Automatic mixing controls">
+        <div class="command-info"><div class="command-overline"><span class="command-led" aria-hidden="true"></span> AUTO MIX CONTROL</div><div id="deadline-title" class="deadline-title">Load two tracks to start</div><p id="deadline-detail" class="deadline-detail">Use the original demo sounds or add your own local MP3 and WAV files.</p><div class="timing-rail" aria-hidden="true"><span id="timing-fill"></span></div></div>
+        <div class="command-controls"><button id="auto-button" class="auto-button" type="button" aria-pressed="true"><span class="toggle-light" aria-hidden="true"></span><span>AutoMix <strong id="auto-label">ON</strong></span></button><button id="protect-button" class="secondary-button" type="button" disabled aria-pressed="false">Finish song</button><button id="next-button" class="secondary-button" type="button" disabled>Mix next <span aria-hidden="true">↗</span></button><button id="transport-button" class="transport-button" type="button" disabled><span id="transport-symbol" aria-hidden="true">▶</span><span id="transport-label">Start set</span></button></div>
+      </section>
 
-        <section class="workspace" aria-label="Party setup and player">
-          <div class="section-heading"><span class="step-number">01 / SETUP</span><span class="section-rule"></span><span class="section-aside">A few songs are all you need to start</span></div>
-          <div class="setup-grid">
-            <div class="setup-card">
-              <label class="field-label" for="party-name">YOUR PARTY</label>
-              <input id="party-name" type="text" maxlength="42" value="Friday at mine" autocomplete="off" />
-              <p class="field-hint">Only visible on this laptop in this prototype.</p>
-              <fieldset class="vibe-fieldset"><legend class="field-label">THE ENERGY</legend><div class="vibe-options"><label><input type="radio" name="vibe" value="chill" /><span>☁ &nbsp; Chill</span></label><label><input type="radio" name="vibe" value="steady" checked /><span>◉ &nbsp; Steady</span></label><label><input type="radio" name="vibe" value="lift" /><span>↗ &nbsp; Lift</span></label></div></fieldset>
-              <p class="field-hint">A preview setting for now. It does not change audio volume or reorder songs yet.</p>
-            </div>
-            <div class="source-card">
-              <div class="source-head"><div><span class="field-label">YOUR MUSIC</span><h2>Bring the soundtrack.</h2></div><span class="source-icon" aria-hidden="true">♫</span></div>
-              <p>Load a short set of original demo sounds, or choose MP3 and WAV files from your computer. Files stay in this browser tab.</p>
-              <div class="source-actions"><button id="demo-button" class="button button-dark" type="button"><span aria-hidden="true">✳</span> Load demo sounds</button><label class="button button-outline" for="file-input"><span aria-hidden="true">＋</span> Choose local files</label><input id="file-input" type="file" accept=".mp3,.wav,audio/mpeg,audio/wav,audio/x-wav" multiple /></div>
-              <p id="source-message" class="source-message" role="status" aria-live="polite">Add at least two playable tracks to begin.</p>
-            </div>
-          </div>
+      <main class="studio" aria-label="AutoMix DJ console">
+        <div class="mobile-deck-switch" aria-label="Select deck to view"><button id="show-deck-a" type="button" aria-pressed="true">DECK A</button><button id="show-deck-b" type="button" aria-pressed="false">DECK B</button></div>
+        <div class="console" id="console">
+          <section id="deck-a" class="deck deck-a" aria-labelledby="deck-a-heading">
+            <div class="deck-top"><div class="deck-title"><span class="deck-letter">A</span><span><strong id="deck-a-heading">DECK A</strong><small>LEFT CHANNEL</small></span></div><span id="deck-a-state" class="deck-state">EMPTY</span></div>
+            <div class="deck-screen"><div class="screen-top"><span id="deck-a-kicker">NO TRACK LOADED</span><span class="screen-dots" aria-hidden="true">•••</span></div><h1 id="deck-a-track">Choose a track</h1><div id="deck-a-artist" class="screen-artist">Ready for your music</div><div class="screen-progress"><span id="deck-a-progress"></span></div><div class="screen-bottom"><span id="deck-a-elapsed">0:00</span><span id="deck-a-duration">0:00</span></div></div>
+            <div class="platter-well"><div id="platter-a" class="platter"><div class="platter-groove groove-one"></div><div class="platter-groove groove-two"></div><div class="platter-groove groove-three"></div><div class="platter-label"><span>A</span><small>AUTOMIX</small></div></div></div>
+            <div class="deck-bottom"><div class="deck-meter" aria-hidden="true"><span id="deck-a-meter"></span></div><div class="deck-buttons"><button id="deck-a-load" class="deck-load" type="button">＋ <span>LOAD A</span></button><button id="deck-a-play" class="deck-play" type="button" disabled aria-label="Play or pause deck A">▶</button></div></div>
+          </section>
 
-          <div class="section-heading player-heading"><span class="step-number">02 / PLAY</span><span class="section-rule"></span><span class="section-aside">Real audio. Automatic transitions.</span></div>
-          <div class="player-grid">
-            <section class="player-card" aria-labelledby="player-title">
-              <div class="player-top"><span id="player-status" class="status-pill"><span class="status-light"></span> READY TO START</span><span class="player-index">A / 01</span></div>
-              <div id="artwork" class="artwork artwork-empty"><div class="artwork-rings" aria-hidden="true"><i></i><i></i><i></i></div><span class="artwork-symbol" aria-hidden="true">✳</span></div>
-              <div class="now-label">NOW PLAYING</div><h2 id="player-title">Your music goes here</h2><p id="player-artist" class="player-artist">Add tracks to get started</p>
-              <div class="progress-wrap"><div class="progress-track"><span id="progress-fill"></span></div><div class="time-row"><span id="elapsed">0:00</span><span id="duration">0:00</span></div></div>
-              <div class="transport"><button id="start-button" class="play-button" type="button" disabled aria-label="Start party">▶</button><div class="transport-side"><button id="next-button" class="icon-button" type="button" disabled aria-label="Mix next track" title="Mix next track">↠</button><button id="protect-button" class="icon-button" type="button" disabled aria-pressed="false" aria-label="Let this song finish" title="Let this song finish">♧</button></div></div>
-              <div class="player-bottom"><label for="volume">VOLUME <span id="volume-value">70%</span></label><input id="volume" type="range" min="0" max="100" value="70" /><span id="mix-note">Transitions: up to 5-second equal-power fade</span></div>
-            </section>
+          <section class="mixer" aria-label="Mixer"><div class="mixer-header"><span class="mixer-icon" aria-hidden="true">✳</span><span>MIX ENGINE</span><small>02 CHANNEL</small></div><div class="mixer-body"><div class="mixer-display"><span>OUTPUT</span><strong id="mixer-readout">STANDBY</strong><small id="mixer-subreadout">Waiting for music</small></div><div class="meter-group" aria-hidden="true"><div class="meter-column"><span>A</span><div class="meter-track"><i id="meter-a"></i></div></div><div class="meter-column"><span>B</span><div class="meter-track"><i id="meter-b"></i></div></div></div><div class="mixer-rule"></div><label class="slider-label" for="master-volume"><span>MASTER LEVEL</span><strong id="volume-value">70%</strong></label><input id="master-volume" class="level-slider" type="range" min="0" max="100" value="70" /><div class="mixer-rule"></div><div class="crossfader-head"><span>CROSSFADER</span><strong id="fader-value">A</strong></div><input id="crossfader" class="crossfader" type="range" min="0" max="100" value="0" disabled aria-label="Crossfader between deck A and deck B" /><div class="fader-ends"><span>A</span><span>B</span></div><p id="fader-hint" class="fader-hint">Available during a mix</p></div><div class="mixer-foot"><span class="mixer-foot-light" aria-hidden="true"></span><span>LOCAL AUDIO OUTPUT</span></div></section>
 
-            <section class="queue-card" aria-labelledby="queue-title"><div class="queue-top"><div><span class="field-label">THE RUNNING ORDER</span><h2 id="queue-title">Up next <span id="queue-count">0</span></h2></div><span class="queue-sparkle" aria-hidden="true">✦</span></div><p class="queue-description">Songs play in this order. Move a track up or down before it starts.</p><ol id="queue-list" class="queue-list"><li class="queue-empty">Your next songs will appear here.</li></ol><div class="queue-footer"><span><span class="queue-footer-dot"></span> Automatic transitions</span><span id="queue-duration">0 min queued</span></div></section>
-          </div>
-          <p id="notice" class="notice" role="status" aria-live="polite"></p>
-        </section>
+          <section id="deck-b" class="deck deck-b" aria-labelledby="deck-b-heading">
+            <div class="deck-top"><div class="deck-title"><span class="deck-letter">B</span><span><strong id="deck-b-heading">DECK B</strong><small>RIGHT CHANNEL</small></span></div><span id="deck-b-state" class="deck-state">EMPTY</span></div>
+            <div class="deck-screen"><div class="screen-top"><span id="deck-b-kicker">NO TRACK LOADED</span><span class="screen-dots" aria-hidden="true">•••</span></div><h1 id="deck-b-track">Choose a track</h1><div id="deck-b-artist" class="screen-artist">Ready for your music</div><div class="screen-progress"><span id="deck-b-progress"></span></div><div class="screen-bottom"><span id="deck-b-elapsed">0:00</span><span id="deck-b-duration">0:00</span></div></div>
+            <div class="platter-well"><div id="platter-b" class="platter"><div class="platter-groove groove-one"></div><div class="platter-groove groove-two"></div><div class="platter-groove groove-three"></div><div class="platter-label"><span>B</span><small>AUTOMIX</small></div></div></div>
+            <div class="deck-bottom"><div class="deck-meter" aria-hidden="true"><span id="deck-b-meter"></span></div><div class="deck-buttons"><button id="deck-b-load" class="deck-load" type="button">＋ <span>LOAD B</span></button><button id="deck-b-play" class="deck-play" type="button" disabled aria-label="Play or pause deck B">▶</button></div></div>
+          </section>
+        </div>
+        <div class="studio-foot"><div><span class="foot-led" aria-hidden="true"></span><span id="foot-status">Two decks. One continuous set.</span></div><button id="queue-button" type="button" aria-expanded="false" aria-controls="music-panel">UP NEXT <strong id="queue-count">0</strong> <span aria-hidden="true">⌃</span></button></div>
       </main>
-      <footer><span>AutoMix Party · Audio prototype</span><span>Guest requests and shared rooms come later.</span></footer>
+
+      <section id="music-panel" class="music-panel" aria-labelledby="panel-title" aria-hidden="true"><div class="panel-head"><div><span class="panel-eyebrow">YOUR MUSIC</span><h2 id="panel-title">Music library</h2></div><div class="panel-actions"><button id="panel-library-tab" type="button" aria-pressed="true">Library</button><button id="panel-queue-tab" type="button" aria-pressed="false">Queue <span id="panel-queue-count">0</span></button><button id="panel-close" class="panel-close" type="button" aria-label="Close music panel">×</button></div></div><div class="panel-info"><span id="panel-instruction">Choose a track to load, or add it to the queue.</span><span id="source-message">Local files stay on this device.</span></div><div id="library-list" class="panel-list" role="list"></div><div id="queue-list" class="panel-list" role="list" hidden></div></section>
+      <div id="notice" class="notice" role="status" aria-live="polite"></div>
     </div>
   </body>
 </html>

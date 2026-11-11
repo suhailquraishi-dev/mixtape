@@ -1,358 +1,314 @@
-const $ = (selector) => document.querySelector(selector);
+import { AudioEngine } from './audio-engine.js';
+import { demoSets, makeDemoWav } from './demo-audio.js';
+import { AUTO_LOAD_REMAINING, FADE_REMAINING, secondsUntilAutoLoad } from './timing.js';
 
+const $ = (selector) => document.querySelector(selector);
+const engine = new AudioEngine();
+const palettes = ['blue', 'lime', 'peach', 'lavender'];
 const ui = {
-  demoButton: $('#demo-button'), fileInput: $('#file-input'), sourceMessage: $('#source-message'),
-  startButton: $('#start-button'), nextButton: $('#next-button'), protectButton: $('#protect-button'),
-  volume: $('#volume'), volumeValue: $('#volume-value'), status: $('#player-status'),
-  artwork: $('#artwork'), title: $('#player-title'), artist: $('#player-artist'),
-  progress: $('#progress-fill'), elapsed: $('#elapsed'), duration: $('#duration'),
-  queue: $('#queue-list'), queueCount: $('#queue-count'), queueDuration: $('#queue-duration'),
-  notice: $('#notice'), mixNote: $('#mix-note'), playerIndex: $('.player-index'),
+  sessionStatus: $('#session-status'), trackCount: $('#track-count'), topCenter: $('.topbar-center'),
+  demoButton: $('#demo-button'), fileButton: $('#file-button'), fileInput: $('#file-input'),
+  libraryButton: $('#library-button'), queueButton: $('#queue-button'), queueCount: $('#queue-count'),
+  deadlineTitle: $('#deadline-title'), deadlineDetail: $('#deadline-detail'), timingFill: $('#timing-fill'),
+  commandOverline: $('.command-overline'), autoButton: $('#auto-button'), autoLabel: $('#auto-label'),
+  protectButton: $('#protect-button'), nextButton: $('#next-button'), transportButton: $('#transport-button'),
+  transportSymbol: $('#transport-symbol'), transportLabel: $('#transport-label'), footStatus: $('#foot-status'), footLed: $('.foot-led'),
+  mixerReadout: $('#mixer-readout'), mixerSubreadout: $('#mixer-subreadout'), volume: $('#master-volume'), volumeValue: $('#volume-value'),
+  crossfader: $('#crossfader'), faderValue: $('#fader-value'), faderHint: $('#fader-hint'), meterA: $('#meter-a'), meterB: $('#meter-b'),
+  panel: $('#music-panel'), panelTitle: $('#panel-title'), panelInstruction: $('#panel-instruction'), sourceMessage: $('#source-message'),
+  panelLibraryTab: $('#panel-library-tab'), panelQueueTab: $('#panel-queue-tab'), panelQueueCount: $('#panel-queue-count'), panelClose: $('#panel-close'),
+  libraryList: $('#library-list'), queueList: $('#queue-list'), notice: $('#notice'),
+  mobileA: $('#show-deck-a'), mobileB: $('#show-deck-b'),
+  decks: [0, 1].map((index) => {
+    const letter = index === 0 ? 'a' : 'b';
+    return {
+      root: $(`#deck-${letter}`), state: $(`#deck-${letter}-state`), kicker: $(`#deck-${letter}-kicker`),
+      track: $(`#deck-${letter}-track`), artist: $(`#deck-${letter}-artist`), progress: $(`#deck-${letter}-progress`),
+      elapsed: $(`#deck-${letter}-elapsed`), duration: $(`#deck-${letter}-duration`), platter: $(`#platter-${letter}`),
+      meter: $(`#deck-${letter}-meter`), load: $(`#deck-${letter}-load`), play: $(`#deck-${letter}-play`),
+    };
+  }),
 };
 
-const palettes = ['lavender', 'lime', 'peach', 'blue'];
-const tracks = new Map();
-const queue = [];
-let current = null;
-let state = 'ready';
-let pausedFrom = 'playing';
-let protectedCurrent = false;
-let transition = null;
-let transitionPending = false;
-let audioContext = null;
-let masterGain = null;
-let decks = null;
-let activeDeck = 0;
-let loadedCount = 0;
-let playedCount = 0;
-const FADE_SECONDS = 5;
+let panelOpen = false;
+let panelTab = 'library';
+let loadTarget = null;
+let mobileDeck = 0;
+let lastActiveDeck = 0;
+let panelKey = '';
+let lastNotice = '';
+let noticeTimeout = null;
+let returnFocus = null;
+let draggingFader = false;
+let demoLoaded = false;
+let sourceMessage = 'Local files stay on this device.';
 
-function formatTime(seconds) {
-  if (!Number.isFinite(seconds)) return '0:00';
-  const total = Math.max(0, Math.floor(seconds));
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-}
+const formatTime = (seconds) => {
+  const value = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+  return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`;
+};
+const formatCountdown = (seconds) => {
+  const value = Number.isFinite(seconds) ? Math.max(0, Math.ceil(seconds)) : 0;
+  return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`;
+};
 
-function announce(message, isError = false) {
+function showNotice(message, error = false) {
+  if (!message) return;
   ui.notice.textContent = message;
-  ui.notice.style.color = isError ? '#ffb3a9' : '#c9f26e';
+  ui.notice.classList.toggle('is-error', error);
+  ui.notice.classList.add('is-visible');
+  clearTimeout(noticeTimeout);
+  noticeTimeout = setTimeout(() => ui.notice.classList.remove('is-visible'), 5200);
 }
 
-function setState(next) {
-  state = next;
-  render();
-}
-
-function createAudioEngine() {
-  if (audioContext) return;
-  audioContext = new AudioContext();
-  masterGain = audioContext.createGain();
-  masterGain.gain.value = Number(ui.volume.value) / 100;
-  masterGain.connect(audioContext.destination);
-  decks = [0, 1].map((index) => {
-    const audio = new Audio();
-    audio.preload = 'auto';
-    const source = audioContext.createMediaElementSource(audio);
-    const gain = audioContext.createGain();
-    gain.gain.value = index === 0 ? 1 : 0;
-    source.connect(gain).connect(masterGain);
-    const deck = { audio, gain, trackId: null };
-    audio.addEventListener('ended', () => onDeckEnded(index));
-    return deck;
-  });
-}
-
-function loadDeck(index, track) {
-  const deck = decks[index];
-  if (deck.trackId === track.id) return deck;
-  deck.audio.pause();
-  deck.audio.src = track.url;
-  deck.audio.load();
-  deck.trackId = track.id;
-  return deck;
-}
-
-function clearDeck(index) {
-  const deck = decks[index];
-  deck.audio.pause();
-  deck.audio.removeAttribute('src');
-  deck.audio.load();
-  deck.trackId = null;
-  deck.gain.gain.value = 0;
-}
-
-async function startParty() {
-  if (queue.length < 2) {
-    announce('Add at least two playable tracks before starting.', true);
-    return;
+function renderDeadline(snapshot) {
+  const { current, next, remaining, state, autoMix, preparedId, preparedState, protectCurrent } = snapshot;
+  let title;
+  let detail;
+  if (!current) {
+    title = state === 'ended' ? 'Set finished' : snapshot.queue.length >= 2 ? 'Ready when you are' : 'Load two tracks to start';
+    detail = state === 'ended' ? 'Add more music or press Start for another set.' : snapshot.queue.length >= 2 ? 'Press Start set. Audio begins only after your click.' : 'Use the original demo sounds or add local MP3 and WAV files.';
+  } else if (state === 'transitioning' || (state === 'paused' && snapshot.transitioning)) {
+    title = `${state === 'paused' ? 'Mix paused' : 'Mixing now'} · ${next?.title || 'next track'}`;
+    detail = state === 'paused' ? 'Both decks are paused at the same mix position.' : 'Use the crossfader to shape this transition.';
+  } else if (!autoMix) {
+    title = `AutoMix off · ends in ${formatCountdown(remaining)}`;
+    detail = 'Load a track and use Mix next, or turn AutoMix back on.';
+  } else if (!next) {
+    title = `Add more music · ${formatCountdown(remaining)} left`;
+    detail = 'No playable track is queued. The current song will finish normally.';
+  } else if (preparedId === next.id && preparedState === 'ready') {
+    title = state === 'paused' ? 'Next track ready · paused' : 'Next track ready';
+    detail = protectCurrent ? `${next.title} starts after this song ends in ${formatCountdown(remaining)}.` : `${next.title} · Mix begins in ${formatCountdown(Math.max(0, remaining - FADE_REMAINING))}.`;
+  } else if (preparedState === 'loading') {
+    title = 'Loading the next deck…';
+    detail = `${next.title} is being prepared. The current song keeps playing.`;
+  } else {
+    title = `Load a track in ${formatCountdown(secondsUntilAutoLoad(snapshot.duration, snapshot.elapsed))}`;
+    detail = `Otherwise AutoMix loads ${next.title} at ${AUTO_LOAD_REMAINING} seconds remaining.`;
   }
-  try {
-    createAudioEngine();
-    await audioContext.resume();
-    const first = tracks.get(queue[0]);
-    const deck = loadDeck(activeDeck, first);
-    deck.gain.gain.value = 1;
-    await deck.audio.play();
-    current = queue.shift();
-    playedCount += 1;
-    protectedCurrent = false;
-    announce('Party started. The next track will mix in automatically.');
-    setState('playing');
-  } catch (error) {
-    announce(`Could not start playback: ${error.message || 'check your audio output and try again.'}`, true);
-    setState('ready');
+  ui.deadlineTitle.textContent = title;
+  ui.deadlineDetail.textContent = detail;
+  ui.timingFill.style.width = `${snapshot.duration ? Math.min(100, snapshot.elapsed / snapshot.duration * 100) : 0}%`;
+}
+
+function renderDeck(snapshot, index) {
+  const deck = snapshot.decks[index];
+  const elements = ui.decks[index];
+  const track = deck.track;
+  const onAir = deck.isActive;
+  const incoming = snapshot.transitioning && !onAir && deck.status === 'mixing';
+  elements.state.textContent = deck.status.toUpperCase();
+  elements.state.classList.toggle('is-on-air', onAir && snapshot.state !== 'paused');
+  elements.state.classList.toggle('is-ready', deck.status === 'ready' || incoming);
+  elements.kicker.textContent = onAir ? 'NOW PLAYING' : incoming ? 'MIXING IN' : deck.status === 'ready' ? 'PREPARED NEXT' : deck.status === 'loading' ? 'PREPARING' : track ? 'QUEUED · NOT LOADED' : 'NO TRACK LOADED';
+  elements.track.textContent = track?.title || 'Choose a track';
+  elements.artist.textContent = track?.artist || 'Ready for your music';
+  elements.elapsed.textContent = formatTime(onAir || incoming ? deck.elapsed : 0);
+  elements.duration.textContent = formatTime(track?.duration);
+  elements.progress.style.width = `${track && (onAir || incoming) ? Math.min(100, deck.elapsed / track.duration * 100) : 0}%`;
+  elements.meter.style.width = `${Math.round(deck.level * 100)}%`;
+  elements.platter.classList.toggle('is-playing', (onAir || incoming) && snapshot.state !== 'paused');
+  elements.load.disabled = (!!snapshot.current && index === snapshot.activeDeck) || snapshot.transitioning || snapshot.frozen;
+  const canStart = !snapshot.current && (snapshot.state === 'ready' || snapshot.state === 'ended') && snapshot.queue.length >= (snapshot.state === 'ready' ? 2 : 1) && index === snapshot.activeDeck;
+  const canControl = onAir || canStart;
+  elements.play.disabled = !canControl;
+  elements.play.textContent = onAir && (snapshot.state === 'playing' || snapshot.state === 'transitioning') ? '❚❚' : '▶';
+  elements.play.setAttribute('aria-label', onAir ? `${snapshot.state === 'paused' ? 'Resume' : 'Pause'} deck ${index === 0 ? 'A' : 'B'}` : `Start deck ${index === 0 ? 'A' : 'B'}`);
+}
+
+function render(snapshot) {
+  if (snapshot.activeDeck !== lastActiveDeck) setMobileDeck(snapshot.activeDeck);
+  lastActiveDeck = snapshot.activeDeck;
+  const playing = snapshot.state === 'playing' || snapshot.state === 'transitioning';
+  const labels = { ready: 'STANDBY', playing: snapshot.autoMix ? 'AUTO MIX ON' : 'MANUAL NEXT', transitioning: 'TRANSITIONING', paused: 'PAUSED', ended: 'SET FINISHED' };
+  ui.sessionStatus.textContent = labels[snapshot.state];
+  ui.topCenter.classList.toggle('is-live', playing);
+  ui.commandOverline.classList.toggle('is-live', playing);
+  ui.footLed.classList.toggle('is-live', playing);
+  ui.trackCount.textContent = `${snapshot.library.filter((track) => !track.unavailable).length} TRACKS`;
+  ui.queueCount.textContent = String(snapshot.queue.length);
+  ui.panelQueueCount.textContent = String(snapshot.queue.length);
+  renderDeadline(snapshot);
+  ui.autoButton.setAttribute('aria-pressed', String(snapshot.autoMix));
+  ui.autoLabel.textContent = snapshot.autoMix ? 'ON' : 'OFF';
+  ui.protectButton.disabled = !snapshot.current || snapshot.transitioning;
+  ui.protectButton.setAttribute('aria-pressed', String(snapshot.protectCurrent));
+  ui.nextButton.disabled = snapshot.state !== 'playing' || !snapshot.queue.length || snapshot.transitioning;
+  ui.transportButton.disabled = !snapshot.current && snapshot.queue.length < (snapshot.state === 'ended' ? 1 : 2);
+  const transportAction = playing ? 'Pause set' : snapshot.state === 'paused' ? 'Resume set' : 'Start set';
+  ui.transportLabel.textContent = transportAction;
+  ui.transportSymbol.textContent = playing ? '❚❚' : '▶';
+  ui.transportButton.setAttribute('aria-label', transportAction);
+  ui.footStatus.textContent = snapshot.current ? `${snapshot.current.title} · ${snapshot.autoMix ? 'automatic transitions' : 'manual next'}` : snapshot.queue.length ? `${snapshot.queue.length} track${snapshot.queue.length === 1 ? '' : 's'} queued · ready for your set` : 'Two decks. One continuous set.';
+  ui.mixerReadout.textContent = snapshot.transitioning ? 'MIXING' : playing ? 'ON AIR' : snapshot.state.toUpperCase();
+  ui.mixerSubreadout.textContent = snapshot.transitioning ? 'Both decks active' : snapshot.current ? snapshot.current.title : 'Waiting for music';
+  ui.meterA.style.height = `${Math.round(snapshot.decks[0].level * 100)}%`;
+  ui.meterB.style.height = `${Math.round(snapshot.decks[1].level * 100)}%`;
+  ui.volumeValue.textContent = `${Math.round(snapshot.volume * 100)}%`;
+  if (document.activeElement !== ui.volume) ui.volume.value = String(Math.round(snapshot.volume * 100));
+  ui.crossfader.disabled = !snapshot.transitioning || snapshot.state === 'paused';
+  if (!draggingFader) ui.crossfader.value = String(snapshot.crossfader);
+  ui.faderValue.textContent = snapshot.transitioning ? `${snapshot.crossfader}% toward B` : snapshot.activeDeck === 0 ? 'A' : 'B';
+  ui.faderHint.textContent = snapshot.transitioning ? 'Take over this mix; release to resume AutoMix' : 'Available during a mix';
+  renderDeck(snapshot, 0);
+  renderDeck(snapshot, 1);
+  if (snapshot.notice && snapshot.notice !== lastNotice) {
+    lastNotice = snapshot.notice;
+    showNotice(snapshot.notice, snapshot.noticeIsError);
   }
-}
-
-async function pauseParty() {
-  if (state !== 'playing' && state !== 'transitioning') return;
-  pausedFrom = state;
-  if (transition) transition.elapsed = performance.now() - transition.startedAt;
-  decks[activeDeck].audio.pause();
-  if (transition) decks[1 - activeDeck].audio.pause();
-  setState('paused');
-}
-
-async function resumeParty() {
-  if (state !== 'paused') return;
-  try {
-    await audioContext.resume();
-    await decks[activeDeck].audio.play();
-    if (transition) {
-      await decks[1 - activeDeck].audio.play();
-      transition.startedAt = performance.now() - transition.elapsed;
-    }
-    setState(pausedFrom);
-  } catch (error) {
-    announce(`Playback could not resume: ${error.message || 'try again.'}`, true);
-  }
-}
-
-async function beginTransition(manual = false) {
-  if (transitionPending || state !== 'playing' || queue.length === 0) return;
-  transitionPending = true;
-  const nextId = queue[0];
-  const nextTrack = tracks.get(nextId);
-  const incomingIndex = 1 - activeDeck;
-  try {
-    const incoming = loadDeck(incomingIndex, nextTrack);
-    incoming.audio.currentTime = 0;
-    incoming.gain.gain.value = 0;
-    await incoming.audio.play();
-    if (state !== 'playing' || queue[0] !== nextId) {
-      incoming.audio.pause();
-      return;
-    }
-    const outgoing = decks[activeDeck].audio;
-    const outgoingRemaining = Number.isFinite(outgoing.duration) ? outgoing.duration - outgoing.currentTime : FADE_SECONDS;
-    const incomingDuration = Number.isFinite(incoming.audio.duration) ? incoming.audio.duration : nextTrack.duration;
-    const duration = Math.max(.25, Math.min(FADE_SECONDS, outgoingRemaining, incomingDuration / 2));
-    transition = { incomingIndex, nextId, duration, startedAt: performance.now(), elapsed: 0 };
-    announce(manual ? `Mixing into ${nextTrack.title}.` : `Automatic mix into ${nextTrack.title}.`);
-    setState('transitioning');
-  } catch (error) {
-    clearDeck(incomingIndex);
-    queue.shift();
-    announce(`Skipped ${nextTrack.title}: this file could not play. ${queue.length ? 'Trying the next track.' : 'No more tracks are queued.'}`, true);
-    render();
-    if (decks[activeDeck].audio.ended) await playAfterEnd();
-  } finally {
-    transitionPending = false;
+  const structuralKey = [panelTab, loadTarget, snapshot.state, snapshot.activeDeck, snapshot.frozen, snapshot.preparedId, snapshot.preparedState, snapshot.current?.id, snapshot.queue.map((track) => track.id).join(','), snapshot.library.map((track) => `${track.id}:${track.unavailable}`).join(',')].join('|');
+  if (panelOpen && structuralKey !== panelKey) {
+    panelKey = structuralKey;
+    renderPanel(snapshot);
   }
 }
 
-function updateFade() {
-  if (!transition || state !== 'transitioning') return;
-  const progress = Math.min(1, (performance.now() - transition.startedAt) / (transition.duration * 1000));
-  decks[activeDeck].gain.gain.value = Math.cos(progress * Math.PI / 2);
-  decks[transition.incomingIndex].gain.gain.value = Math.sin(progress * Math.PI / 2);
-  if (progress >= 1 || decks[activeDeck].audio.ended) finishTransition();
-}
-
-function finishTransition() {
-  if (!transition) return;
-  const outgoingIndex = activeDeck;
-  activeDeck = transition.incomingIndex;
-  current = transition.nextId;
-  queue.shift();
-  playedCount += 1;
-  transition = null;
-  protectedCurrent = false;
-  clearDeck(outgoingIndex);
-  decks[activeDeck].gain.gain.value = 1;
-  setState('playing');
-}
-
-async function playAfterEnd() {
-  if (!current || state === 'paused' || state === 'ended') return;
-  if (transition) {
-    finishTransition();
-    return;
-  }
-  if (queue.length === 0) {
-    current = null;
-    protectedCurrent = false;
-    setState('ended');
-    announce('The queue finished. Add more music to start another set.');
-    return;
-  }
-  const nextId = queue[0];
-  try {
-    const deck = loadDeck(activeDeck, tracks.get(nextId));
-    deck.gain.gain.value = 1;
-    await deck.audio.play();
-    current = queue.shift();
-    playedCount += 1;
-    protectedCurrent = false;
-    setState('playing');
-  } catch (error) {
-    queue.shift();
-    announce(`Skipped ${tracks.get(nextId).title}: this file could not play.`, true);
-    await playAfterEnd();
-  }
-}
-
-function onDeckEnded(index) {
-  if (index === activeDeck && state !== 'paused') void playAfterEnd();
-  if (transition && index === transition.incomingIndex) {
-    finishTransition();
-    void playAfterEnd();
-  }
-}
-
-function tick() {
-  if (decks && current) {
-    const audio = decks[activeDeck].audio;
-    ui.elapsed.textContent = formatTime(audio.currentTime);
-    ui.duration.textContent = formatTime(audio.duration || tracks.get(current)?.duration);
-    ui.progress.style.width = `${audio.duration ? Math.min(100, audio.currentTime / audio.duration * 100) : 0}%`;
-    if (state === 'playing' && !protectedCurrent && !transitionPending && queue.length && Number.isFinite(audio.duration)) {
-      const remaining = audio.duration - audio.currentTime;
-      if (remaining <= FADE_SECONDS && remaining > 0) void beginTransition();
-    }
-    updateFade();
-  }
-  requestAnimationFrame(tick);
-}
-
-function render() {
-  const track = tracks.get(current) || (queue.length ? tracks.get(queue[0]) : null);
-  ui.title.textContent = tracks.get(current)?.title || (track ? 'Ready when you are' : 'Your music goes here');
-  ui.artist.textContent = tracks.get(current)?.artist || (track ? `${queue.length} tracks loaded · Press Start party` : 'Add tracks to get started');
-  ui.artwork.className = `artwork ${track ? '' : 'artwork-empty'}`;
-  if (track) ui.artwork.dataset.palette = track.palette;
-  else delete ui.artwork.dataset.palette;
-  const labels = { ready: 'READY TO START', playing: 'AUTO MIX ON', transitioning: 'MIXING NEXT', paused: 'PAUSED', ended: 'SET FINISHED' };
-  ui.status.innerHTML = `<span class="status-light"></span> ${labels[state]}`;
-  ui.status.classList.toggle('is-active', state === 'playing' || state === 'transitioning');
-  ui.playerIndex.textContent = current ? `TRACK / ${String(playedCount).padStart(2, '0')}` : 'A / 01';
-  ui.startButton.disabled = (state === 'ready' || state === 'ended') && queue.length < 2;
-  ui.startButton.textContent = state === 'playing' || state === 'transitioning' ? '❚❚' : '▶';
-  ui.startButton.setAttribute('aria-label', state === 'playing' || state === 'transitioning' ? 'Pause party' : state === 'paused' ? 'Resume party' : 'Start party');
-  ui.nextButton.disabled = state !== 'playing' || queue.length === 0 || transitionPending;
-  ui.protectButton.disabled = !(state === 'playing' || state === 'paused');
-  ui.protectButton.setAttribute('aria-pressed', String(protectedCurrent));
-  ui.protectButton.title = protectedCurrent ? 'Allow automatic transition' : 'Let this song finish';
-  ui.protectButton.setAttribute('aria-label', ui.protectButton.title);
-  ui.mixNote.textContent = protectedCurrent ? 'Current song will play to its end' : 'Transitions: up to 5-second equal-power fade';
-  ui.sourceMessage.textContent = loadedCount === 0 ? 'Add at least two playable tracks to begin.' : `${loadedCount} playable track${loadedCount === 1 ? '' : 's'} loaded${loadedCount < 2 ? ' · add one more to start' : ' · ready to play'}.`;
-  renderQueue();
-}
-
-function renderQueue() {
-  ui.queue.replaceChildren();
-  ui.queueCount.textContent = String(queue.length);
-  const seconds = queue.reduce((sum, id) => sum + (tracks.get(id)?.duration || 0), 0);
-  ui.queueDuration.textContent = `${Math.ceil(seconds / 60)} min queued`;
-  if (queue.length === 0) {
-    const empty = document.createElement('li');
-    empty.className = 'queue-empty';
-    empty.textContent = current ? 'Nothing else queued. Add more music to keep going.' : 'Your next songs will appear here.';
-    ui.queue.append(empty);
-    return;
-  }
-  queue.forEach((id, index) => {
-    const track = tracks.get(id);
-    const row = document.createElement('li');
-    row.className = `queue-item ${index === 0 && current ? 'next-up' : ''}`;
-    const art = document.createElement('span');
-    art.className = `queue-art ${track.palette}`;
-    art.setAttribute('aria-hidden', 'true');
-    art.textContent = '✳';
-    const detail = document.createElement('div');
-    detail.style.minWidth = '0';
-    const name = document.createElement('div');
-    name.className = 'queue-name';
-    name.textContent = track.title;
-    const meta = document.createElement('div');
-    meta.className = 'queue-meta';
-    meta.textContent = `${index === 0 && current ? 'UP NEXT · ' : ''}${track.artist} · ${formatTime(track.duration)}`;
-    detail.append(name, meta);
-    const actions = document.createElement('div');
-    actions.className = 'queue-actions';
-    const up = makeQueueButton('↑', `Move ${track.title} up`, () => moveTrack(index, -1));
-    up.disabled = index === 0 || state === 'transitioning';
-    const down = makeQueueButton('↓', `Move ${track.title} down`, () => moveTrack(index, 1));
-    down.disabled = index === queue.length - 1 || state === 'transitioning';
-    const remove = makeQueueButton('×', `Remove ${track.title}`, () => removeTrack(index));
-    remove.disabled = state === 'transitioning';
-    actions.append(up, down, remove);
-    row.append(art, detail, actions);
-    ui.queue.append(row);
-  });
-}
-
-function makeQueueButton(text, label, callback) {
+function makeButton(text, label, action, options = {}) {
   const button = document.createElement('button');
   button.type = 'button';
   button.textContent = text;
   button.setAttribute('aria-label', label);
-  button.title = label;
-  button.addEventListener('click', callback);
+  if (options.className) button.className = options.className;
+  button.disabled = Boolean(options.disabled);
+  button.addEventListener('click', action);
   return button;
 }
 
-function moveTrack(index, direction) {
-  if (state === 'transitioning') return;
-  const target = index + direction;
-  if (target < 0 || target >= queue.length) return;
-  [queue[index], queue[target]] = [queue[target], queue[index]];
-  render();
+function makeTrackRow(track, meta, actions, isNext = false) {
+  const row = document.createElement('div');
+  row.className = `track-row ${isNext ? 'is-next' : ''}`;
+  row.setAttribute('role', 'listitem');
+  const art = document.createElement('span');
+  art.className = `track-art ${track.palette || 'blue'}`;
+  art.setAttribute('aria-hidden', 'true');
+  art.textContent = '✳';
+  const copy = document.createElement('div');
+  copy.className = 'track-copy';
+  const title = document.createElement('strong');
+  title.textContent = track.title;
+  const subtitle = document.createElement('small');
+  subtitle.textContent = meta;
+  copy.append(title, subtitle);
+  const duration = document.createElement('span');
+  duration.className = 'track-duration';
+  duration.textContent = formatTime(track.duration);
+  const actionBox = document.createElement('div');
+  actionBox.className = 'track-actions';
+  actionBox.append(...actions);
+  row.append(art, copy, duration, actionBox);
+  return row;
 }
 
-function removeTrack(index) {
-  if (state === 'transitioning') return;
-  const [id] = queue.splice(index, 1);
-  loadedCount -= 1;
-  if (!queue.includes(id) && current !== id) {
-    URL.revokeObjectURL(tracks.get(id).url);
-    tracks.delete(id);
+function renderPanel(snapshot) {
+  ui.panelTitle.textContent = panelTab === 'library' ? 'Music library' : 'Running order';
+  ui.panelLibraryTab.setAttribute('aria-pressed', String(panelTab === 'library'));
+  ui.panelQueueTab.setAttribute('aria-pressed', String(panelTab === 'queue'));
+  ui.libraryList.hidden = panelTab !== 'library';
+  ui.queueList.hidden = panelTab !== 'queue';
+  ui.sourceMessage.textContent = sourceMessage;
+  ui.panelInstruction.textContent = loadTarget === null ? panelTab === 'queue' ? 'Move or remove tracks before the next deck locks.' : 'Load a track or add it to the running order.' : `Choose a track for Deck ${loadTarget === 0 ? 'A' : 'B'}.`;
+  if (panelTab === 'library') {
+    ui.libraryList.replaceChildren();
+    if (!snapshot.library.length) {
+      const empty = document.createElement('div');
+      empty.className = 'panel-empty';
+      const heading = document.createElement('strong');
+      heading.textContent = 'Your library is empty';
+      const note = document.createElement('span');
+      note.textContent = 'Load original demo sounds or your own MP3 and WAV files.';
+      const demo = makeButton('Load demo sounds', 'Load demo sounds', () => void loadDemo());
+      empty.append(heading, note, demo);
+      ui.libraryList.append(empty);
+    } else {
+      snapshot.library.forEach((track) => {
+        const queued = snapshot.queue.some((item) => item.id === track.id);
+        const isCurrent = snapshot.current?.id === track.id;
+        const target = loadTarget === null ? snapshot.current ? 1 - snapshot.activeDeck : 0 : loadTarget;
+        const label = `Load ${track.title} on Deck ${target === 0 ? 'A' : 'B'}`;
+        const load = makeButton(`Load ${target === 0 ? 'A' : 'B'}`, label, () => {
+          const accepted = engine.selectForDeck(track.id, target);
+          if (accepted) closePanel();
+          else showNotice('That deck is locked during this transition.', true);
+        }, { className: 'primary', disabled: track.unavailable || isCurrent || snapshot.transitioning || snapshot.frozen || (!!snapshot.current && target === snapshot.activeDeck) });
+        const add = makeButton(queued ? 'Queued' : 'Queue', `${queued ? 'Already queued' : 'Add to queue'}: ${track.title}`, () => engine.enqueue(track.id), { disabled: queued || isCurrent || track.unavailable });
+        ui.libraryList.append(makeTrackRow(track, track.unavailable ? 'Unavailable · reload the file' : track.artist, [load, add], queued && snapshot.next?.id === track.id));
+      });
+    }
+  } else {
+    ui.queueList.replaceChildren();
+    if (!snapshot.queue.length) {
+      const empty = document.createElement('div');
+      empty.className = 'panel-empty';
+      const heading = document.createElement('strong');
+      heading.textContent = 'Nothing up next';
+      const note = document.createElement('span');
+      note.textContent = 'Open the library to add tracks to your running order.';
+      const browse = makeButton('Browse library', 'Browse music library', () => openPanel('library'));
+      empty.append(heading, note, browse);
+      ui.queueList.append(empty);
+    } else {
+      snapshot.queue.forEach((track, index) => {
+        const locked = snapshot.transitioning || snapshot.frozen;
+        const load = makeButton(index === 0 && snapshot.preparedId === track.id ? 'Ready' : 'Load next', `Load ${track.title} next`, () => { void engine.selectNext(track.id); closePanel(); }, { className: 'primary', disabled: locked || (index === 0 && snapshot.preparedId === track.id && snapshot.preparedState === 'ready') });
+        const up = makeButton('↑', `Move ${track.title} up`, () => engine.moveQueue(track.id, -1), { className: 'square', disabled: locked || index === 0 });
+        const down = makeButton('↓', `Move ${track.title} down`, () => engine.moveQueue(track.id, 1), { className: 'square', disabled: locked || index === snapshot.queue.length - 1 });
+        const remove = makeButton('×', `Remove ${track.title} from queue`, () => engine.removeFromQueue(track.id), { className: 'square', disabled: locked });
+        ui.queueList.append(makeTrackRow(track, `${index === 0 ? 'UP NEXT · ' : ''}${track.artist}`, [load, up, down, remove], index === 0));
+      });
+    }
   }
-  render();
 }
 
-function addTrack(track) {
-  tracks.set(track.id, track);
-  queue.push(track.id);
-  loadedCount += 1;
-  render();
+function openPanel(tab = 'library', target = null) {
+  if (!panelOpen) returnFocus = document.activeElement;
+  panelOpen = true;
+  panelTab = tab;
+  loadTarget = target;
+  panelKey = '';
+  ui.panel.dataset.open = 'true';
+  ui.panel.inert = false;
+  ui.panel.setAttribute('aria-hidden', 'false');
+  ui.libraryButton.setAttribute('aria-expanded', 'true');
+  ui.queueButton.setAttribute('aria-expanded', 'true');
+  render(engine.snapshot());
+  ui.panelClose.focus();
+}
+
+function closePanel() {
+  panelOpen = false;
+  loadTarget = null;
+  ui.panel.dataset.open = 'false';
+  ui.panel.inert = true;
+  ui.panel.setAttribute('aria-hidden', 'true');
+  ui.libraryButton.setAttribute('aria-expanded', 'false');
+  ui.queueButton.setAttribute('aria-expanded', 'false');
+  if (returnFocus?.focus) returnFocus.focus();
+}
+
+function setMobileDeck(index) {
+  mobileDeck = index;
+  ui.mobileA.setAttribute('aria-pressed', String(index === 0));
+  ui.mobileB.setAttribute('aria-pressed', String(index === 1));
+  ui.decks[0].root.dataset.mobileVisible = String(index === 0);
+  ui.decks[1].root.dataset.mobileVisible = String(index === 1);
 }
 
 function probeDuration(url) {
   return new Promise((resolve, reject) => {
     const audio = new Audio();
-    let done = false;
-    const timeout = setTimeout(() => settle(new Error('Timed out reading audio metadata.')), 10000);
-    function settle(error, duration) {
-      if (done) return;
-      done = true;
+    let settled = false;
+    const timeout = setTimeout(() => finish(new Error('Timed out reading audio metadata.')), 10000);
+    function finish(error, duration) {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeout);
       audio.removeAttribute('src');
       audio.load();
       error ? reject(error) : resolve(duration);
     }
-    audio.addEventListener('loadedmetadata', () => Number.isFinite(audio.duration) && audio.duration > 0 ? settle(null, audio.duration) : settle(new Error('Audio duration is unavailable.')), { once: true });
-    audio.addEventListener('error', () => settle(new Error('This file could not be decoded.')), { once: true });
+    audio.addEventListener('loadedmetadata', () => Number.isFinite(audio.duration) && audio.duration > 0 ? finish(null, audio.duration) : finish(new Error('Audio duration is unavailable.')), { once: true });
+    audio.addEventListener('error', () => finish(new Error('The file could not be decoded.')), { once: true });
     audio.preload = 'metadata';
     audio.src = url;
   });
@@ -361,118 +317,90 @@ function probeDuration(url) {
 async function addLocalFiles(files) {
   const candidates = [...files];
   if (!candidates.length) return;
-  ui.sourceMessage.textContent = `Checking ${candidates.length} local file${candidates.length === 1 ? '' : 's'}…`;
+  sourceMessage = `Checking ${candidates.length} local file${candidates.length === 1 ? '' : 's'}…`;
+  render(engine.snapshot());
+  let added = 0;
   let failed = 0;
   for (const file of candidates) {
     if (!/\.(mp3|wav)$/i.test(file.name)) { failed += 1; continue; }
     const url = URL.createObjectURL(file);
     try {
       const duration = await probeDuration(url);
-      const title = file.name.replace(/\.(mp3|wav)$/i, '');
-      addTrack({ id: crypto.randomUUID(), title, artist: 'Local file', duration, url, palette: palettes[loadedCount % palettes.length] });
+      engine.addTrack({ id: crypto.randomUUID(), title: file.name.replace(/\.(mp3|wav)$/i, ''), artist: 'Local file', duration, url, palette: palettes[engine.tracks.size % palettes.length] });
+      added += 1;
     } catch {
       URL.revokeObjectURL(url);
       failed += 1;
     }
   }
-  if (failed) announce(`${failed} file${failed === 1 ? '' : 's'} could not be loaded. Use playable MP3 or PCM WAV files.`, true);
-  else announce(`${candidates.length} local file${candidates.length === 1 ? '' : 's'} added. Audio stays on this device.`);
-  render();
+  sourceMessage = failed ? `${added} added · ${failed} failed` : `${added} local track${added === 1 ? '' : 's'} added`;
+  showNotice(failed ? `${failed} file${failed === 1 ? '' : 's'} could not load. Use playable MP3 or PCM WAV files.` : `${added} track${added === 1 ? '' : 's'} added. Audio stays on this device.`, failed > 0);
+  panelKey = '';
+  render(engine.snapshot());
   ui.fileInput.value = '';
 }
 
-const demoSets = [
-  { title: 'Soft Arrival', artist: 'AutoMix Demo · 92 BPM', bpm: 92, roots: [48, 55, 52, 57], wave: 'soft', duration: 34 },
-  { title: 'City Lights', artist: 'AutoMix Demo · 108 BPM', bpm: 108, roots: [50, 57, 53, 60], wave: 'bright', duration: 36 },
-  { title: 'After Hours', artist: 'AutoMix Demo · 118 BPM', bpm: 118, roots: [45, 52, 48, 55], wave: 'warm', duration: 38 },
-  { title: 'One More Song', artist: 'AutoMix Demo · 102 BPM', bpm: 102, roots: [53, 60, 57, 64], wave: 'round', duration: 35 },
-];
-
-const frequency = (midi) => 440 * Math.pow(2, (midi - 69) / 12);
-const fract = (value) => value - Math.floor(value);
-
-function makeDemoWav(spec) {
-  const sampleRate = 22050;
-  const count = Math.floor(spec.duration * sampleRate);
-  const bytes = new ArrayBuffer(44 + count * 2);
-  const view = new DataView(bytes);
-  const str = (offset, value) => { for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i)); };
-  str(0, 'RIFF'); view.setUint32(4, 36 + count * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
-  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true); str(36, 'data'); view.setUint32(40, count * 2, true);
-  const beatLength = 60 / spec.bpm;
-  const chordLength = beatLength * 8;
-  const harmonics = spec.wave === 'bright' ? [1, .35, .18] : spec.wave === 'soft' ? [1, .13, .04] : [1, .25, .08];
-  for (let i = 0; i < count; i++) {
-    const t = i / sampleRate;
-    const root = spec.roots[Math.floor(t / chordLength) % spec.roots.length];
-    const beat = t / beatLength;
-    const beatPhase = fract(beat);
-    const beatIndex = Math.floor(beat) % 4;
-    const barFade = Math.min(1, t / 1.2, (spec.duration - t) / 1.1);
-    const chordNotes = [root, root + 7, root + 12];
-    let chord = 0;
-    for (const note of chordNotes) {
-      const p = 2 * Math.PI * frequency(note) * t;
-      chord += (Math.sin(p) * harmonics[0] + Math.sin(2 * p) * harmonics[1] + Math.sin(3 * p) * harmonics[2]) / 3;
-    }
-    const arpeggioIndex = Math.floor(beat * 2) % 8;
-    const arpNote = root + [12, 19, 24, 19, 12, 16, 19, 16][arpeggioIndex];
-    const arpPhase = fract(beat * 2);
-    const arp = Math.sin(2 * Math.PI * frequency(arpNote) * t) * Math.exp(-arpPhase * 4.5) * .12;
-    const bass = Math.sin(2 * Math.PI * frequency(root - 12) * t) * Math.exp(-beatPhase * 3) * .18;
-    const kick = Math.sin(2 * Math.PI * (58 * beatPhase * beatLength + 28 * (1 - Math.exp(-beatPhase * 28)))) * Math.exp(-beatPhase * 18) * .35;
-    const noise = fract(Math.sin(i * 12.9898 + spec.bpm * 78.233) * 43758.5453) * 2 - 1;
-    const snare = beatIndex === 1 || beatIndex === 3 ? noise * Math.exp(-beatPhase * 25) * .13 : 0;
-    const hat = noise * Math.exp(-fract(beat * 2) * 38) * .035;
-    const value = Math.max(-1, Math.min(1, (chord * .25 + arp + bass + kick + snare + hat) * Math.max(0, barFade)));
-    view.setInt16(44 + i * 2, Math.round(value * 32767), true);
-  }
-  return new Blob([bytes], { type: 'audio/wav' });
-}
-
 async function loadDemo() {
+  if (demoLoaded) return;
+  demoLoaded = true;
   ui.demoButton.disabled = true;
-  ui.demoButton.textContent = 'Generating sounds…';
+  ui.demoButton.textContent = 'Creating sounds…';
   try {
-    for (let i = 0; i < demoSets.length; i++) {
-      const spec = demoSets[i];
-      ui.sourceMessage.textContent = `Creating original demo sound ${i + 1} of ${demoSets.length}…`;
+    for (const spec of demoSets) {
+      sourceMessage = `Creating ${spec.title}…`;
+      panelKey = '';
+      render(engine.snapshot());
       await new Promise((resolve) => setTimeout(resolve, 0));
       const blob = makeDemoWav(spec);
-      addTrack({ id: crypto.randomUUID(), title: spec.title, artist: spec.artist, duration: spec.duration, url: URL.createObjectURL(blob), palette: palettes[loadedCount % palettes.length] });
+      engine.addTrack({ id: crypto.randomUUID(), title: spec.title, artist: spec.artist, duration: spec.duration, url: URL.createObjectURL(blob), palette: palettes[engine.tracks.size % palettes.length] });
     }
-    announce('Four original demo sounds loaded. Press Start party to hear the mix.');
+    ui.demoButton.textContent = 'Demo ready';
+    sourceMessage = 'Four original demo sounds ready';
+    showNotice('Four original demo sounds loaded. Press Start set.');
   } catch (error) {
-    announce(`Could not generate demo sounds: ${error.message}`, true);
+    demoLoaded = false;
     ui.demoButton.disabled = false;
+    ui.demoButton.textContent = 'Load demo';
+    showNotice(`Could not create demo sounds: ${error.message}`, true);
   }
-  ui.demoButton.textContent = 'Demo sounds loaded';
-  render();
+  panelKey = '';
+  render(engine.snapshot());
 }
 
-ui.demoButton.addEventListener('click', loadDemo);
-ui.fileInput.addEventListener('change', (event) => void addLocalFiles(event.target.files));
-ui.startButton.addEventListener('click', () => {
-  if (state === 'ready' || state === 'ended') void startParty();
-  else if (state === 'paused') void resumeParty();
-  else void pauseParty();
-});
-ui.nextButton.addEventListener('click', () => void beginTransition(true));
-ui.protectButton.addEventListener('click', () => {
-  protectedCurrent = !protectedCurrent;
-  announce(protectedCurrent ? 'This song will finish before the next starts.' : 'Automatic transitions are on again.');
-  render();
-});
-ui.volume.addEventListener('input', () => {
-  const value = Number(ui.volume.value) / 100;
-  ui.volumeValue.textContent = `${Math.round(value * 100)}%`;
-  if (masterGain) masterGain.gain.value = value;
-});
-window.addEventListener('pagehide', () => {
-  for (const track of tracks.values()) URL.revokeObjectURL(track.url);
-});
+function togglePlayback() {
+  const snapshot = engine.snapshot();
+  if (snapshot.state === 'paused') void engine.resume();
+  else if (snapshot.state === 'playing' || snapshot.state === 'transitioning') engine.pause();
+  else void engine.start();
+}
 
-render();
-requestAnimationFrame(tick);
+ui.demoButton.addEventListener('click', () => void loadDemo());
+ui.fileButton.addEventListener('click', () => ui.fileInput.click());
+ui.fileInput.addEventListener('change', (event) => void addLocalFiles(event.target.files));
+ui.libraryButton.addEventListener('click', () => panelOpen ? closePanel() : openPanel('library'));
+ui.queueButton.addEventListener('click', () => panelOpen && panelTab === 'queue' ? closePanel() : openPanel('queue'));
+ui.panelLibraryTab.addEventListener('click', () => openPanel('library'));
+ui.panelQueueTab.addEventListener('click', () => openPanel('queue'));
+ui.panelClose.addEventListener('click', closePanel);
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && panelOpen) closePanel(); });
+ui.transportButton.addEventListener('click', togglePlayback);
+ui.nextButton.addEventListener('click', () => void engine.mixNext());
+ui.autoButton.addEventListener('click', () => engine.setAutoMix(!engine.autoMix));
+ui.protectButton.addEventListener('click', () => engine.setProtected(!engine.protectCurrent));
+ui.volume.addEventListener('input', () => engine.setVolume(Number(ui.volume.value) / 100));
+ui.crossfader.addEventListener('input', () => { draggingFader = true; engine.setCrossfader(Number(ui.crossfader.value)); });
+ui.crossfader.addEventListener('change', () => { draggingFader = false; engine.releaseCrossfader(); });
+ui.crossfader.addEventListener('pointerup', () => { draggingFader = false; engine.releaseCrossfader(); });
+ui.crossfader.addEventListener('keyup', () => { draggingFader = false; engine.releaseCrossfader(); });
+ui.crossfader.addEventListener('blur', () => { draggingFader = false; engine.releaseCrossfader(); });
+ui.mobileA.addEventListener('click', () => setMobileDeck(0));
+ui.mobileB.addEventListener('click', () => setMobileDeck(1));
+ui.decks.forEach((deck, index) => {
+  deck.load.addEventListener('click', () => openPanel('library', index));
+  deck.play.addEventListener('click', togglePlayback);
+});
+window.addEventListener('pagehide', () => engine.dispose());
+
+ui.panel.inert = true;
+setMobileDeck(0);
+engine.subscribe(render);
