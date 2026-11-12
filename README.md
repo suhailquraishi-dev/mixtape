@@ -1,6 +1,6 @@
 # Mixtape
 
-Mixtape is a browser-based party music player. **Party Mode** is the default: add local music, see what is playing and what comes next, and let AutoMix keep the set moving. **Studio Mode** reveals the two decks and crossfader for hosts who want more control. Switching modes does not restart playback.
+Mixtape is a browser DJ console for your own music. Its default view is one interactive 3D controller with two decks and a mixer. **AutoMix DJ** and **Manual DJ** operate the same audio engine, so switching modes keeps the set playing.
 
 ## Run
 
@@ -8,22 +8,23 @@ Mixtape is a browser-based party music player. **Party Mode** is the default: ad
 npm start
 ```
 
-Open `http://localhost:8000`. Use **Add music** to select multiple MP3 or PCM WAV files, drag files onto Party Mode, or choose **Try demo** for four original synthesized songs. A single song can play normally. Add at least two for continuous transitions.
+Open `http://localhost:8000`. Import local MP3 or PCM WAV files with **Add music**, drop files onto the console, or choose **Try demo** for four original synthesized songs. Use **Music library** to load a specific deck or add a song to the queue. The library and queue scroll inside a panel; the main console stays on one screen.
 
-## Controls
+## Play
 
-- **Start party**, **Pause**, and **Resume** control actual local audio. **Mix now** fades into the first queued song. **Skip** advances with a short fade.
-- AutoMix prepares the next song at 15 seconds remaining, locks the choice at 10 seconds, and begins a real equal-power crossfade with up to 5 seconds remaining. Turning AutoMix off lets the current song finish without an automatic transition.
-- The library shows file-derived names and durations. Search it, add played songs back to the queue, or remove demo tracks with **Clear demos**. Reorder the queue by dragging a song or using its labeled up/down buttons.
-- The waveform is calculated from the selected audio file and advances with real playback time. Files larger than 24 MB or files the browser cannot decode still play when supported, but show a truthful unavailable preview.
-- Studio Mode uses the same queue and audio engine. Its deck load buttons, transport, master volume, and overlap crossfader control the real audio graph.
+- In **AutoMix DJ**, press **Start AutoMix**. The queue plays in order. The next track is prepared at 15 seconds remaining, locked at 10 seconds, and blended with an equal-power fade near the end. **Mix now** starts the next transition early; **Skip** uses a short fade. The crossfader animates with the real audio transition.
+- In **Manual DJ**, use either deck's Play and Cue controls, jog wheels for coarse seeking, channel faders, crossfader, three-band EQ, low-pass filters, and master volume. These controls change the actual sound. **Mix now** completes a blend from the current crossfader position if both decks are playing.
+- During an automatic transition, moving the crossfader takes control of that fade. Releasing it lets the fade complete smoothly. A transport or fader action on the 3D controller enters Manual DJ where needed.
+- The **Mixer controls** sheet provides keyboard-accessible sliders equivalent to the 3D faders and knobs. The deck strip provides accessible transport and load buttons. **Reduced effects** lowers rendering cost; **Reset view** restores the camera.
 
-## Privacy and scope
+The waveforms come from the selected audio files, and the meters respond to the audio signal. The device screens, jogs, faders, and lights follow the same playback snapshot as the 2D controls.
 
-Music stays on the host device. The app uses browser object URLs and does not upload local audio. Library and queue state last only for the current tab; reloading clears them. There is no account, streaming catalogue, beatmatching, key analysis, or saved session yet.
+## Privacy and current scope
+
+Music stays on the host device. The app uses browser object URLs and does not upload local audio. Library and queue state last only for the current tab. There is no account or streaming catalogue. AutoMix currently uses timed fades; it does **not** perform beatmatching, key or phrase analysis, or loudness normalization. A long listening and soak test is still needed before production promotion.
 
 ## Development
 
-The app is plain HTML, CSS, and JavaScript without a build step or production dependencies. `src/audio-engine.js` owns playback and queue state; `src/app.js` renders both modes from its snapshots. `src/waveform.js` computes file-derived waveform peaks. `src/demo-audio.js` generates original WAV demo tracks. Run `npm run check` for syntax and unit tests.
+The app is plain HTML, CSS, and JavaScript without a build step. `src/audio-engine.js` owns playback and queue state; `src/app.js` renders one shared snapshot; `src/render3d/controller.js` builds the original procedural Three.js console. The vendored Three.js module is MIT licensed; see [`vendor/THREE-LICENSE.txt`](vendor/THREE-LICENSE.txt). `src/waveform.js` computes file-derived peaks. `src/demo-audio.js` generates the demo WAV files. Run `npm run check` for syntax and unit checks.
 
-See [the redesign audit](docs/redesign-audit.md) and [review screenshots](docs/screenshots/).
+See [the 3D console handoff](docs/3d-console-handoff.md) for verification and remaining work, and [screenshots](docs/screenshots/) for the visual review.

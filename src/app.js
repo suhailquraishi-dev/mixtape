@@ -2,6 +2,7 @@ import { AudioEngine } from './audio-engine.js';
 import { demoSets, makeDemoWav } from './demo-audio.js';
 import { AUTO_LOAD_REMAINING, FADE_REMAINING, secondsUntilAutoLoad } from './timing.js';
 import { WaveformView } from './waveform.js';
+import { ControllerStage } from './render3d/controller.js';
 
 const $ = (selector) => document.querySelector(selector);
 const engine = new AudioEngine();
@@ -31,6 +32,20 @@ const ui = {
   panelLibraryTab: $('#panel-library-tab'), panelQueueTab: $('#panel-queue-tab'), panelQueueCount: $('#panel-queue-count'), panelClose: $('#panel-close'),
   libraryList: $('#library-list'), queueList: $('#queue-list'), notice: $('#notice'),
   mobileA: $('#show-deck-a'), mobileB: $('#show-deck-b'),
+  hardware: {
+    canvas: $('#hardware-canvas'), tooltip: $('#hardware-tooltip'), fallback: $('#hardware-fallback'),
+    mixState: $('#hardware-mix-state'), mixDetail: $('#hardware-mix-detail'), stageStatus: $('#hardware-stage-status'), stageLed: $('.stage-led'),
+    aLevel: $('#hardware-a-level'), bLevel: $('#hardware-b-level'),
+    play: $('#hardware-play'), mix: $('#hardware-mix'), skip: $('#hardware-skip'), demo: $('#hardware-demo'), library: $('#hardware-library'), queue: $('#hardware-queue'), queueCount: $('#hardware-queue-count'),
+    nextTitle: $('#hardware-next-title'), nextDetail: $('#hardware-next-detail'), reset: $('#hardware-reset-view'), effects: $('#hardware-effects'),
+    controls: $('#hardware-controls'), controlsToggle: $('#hardware-controls-toggle'), controlsClose: $('#hardware-controls-close'),
+    volume: $('#hardware-volume'), crossfader: $('#hardware-crossfader'),
+    decks: [0, 1].map((index) => { const letter = index === 0 ? 'a' : 'b'; return {
+      state: $(`#hardware-${letter}-state`), title: $(`#hardware-${letter}-title`), meta: $(`#hardware-${letter}-meta`), time: $(`#hardware-${letter}-time`),
+      wave: $(`#hardware-${letter}-wave`), load: $(`#hardware-${letter}-load`), play: $(`#hardware-${letter}-play`), cue: $(`#hardware-${letter}-cue`),
+      channel: $(`#hardware-${letter}-channel`), low: $(`#hardware-${letter}-low`), mid: $(`#hardware-${letter}-mid`), high: $(`#hardware-${letter}-high`), filter: $(`#hardware-${letter}-filter`),
+    }; }),
+  },
   decks: [0, 1].map((index) => {
     const letter = index === 0 ? 'a' : 'b';
     return {
@@ -42,6 +57,11 @@ const ui = {
   }),
 };
 const waveform = new WaveformView(ui.party.waveform, ui.party.waveformState);
+const hardwareWaveforms = ui.hardware.decks.map((deck) => new WaveformView(deck.wave, document.createElement('span')));
+const hardwareStage = new ControllerStage(ui.hardware.canvas, ui.hardware.tooltip, ui.hardware.fallback, engine, {
+  load: (index) => openPanel('library', index),
+  takeover: () => { setMode('studio'); showNotice('Manual takeover. AutoMix is off.'); },
+});
 
 let panelOpen = false;
 let panelTab = 'library';
@@ -70,12 +90,55 @@ const formatCountdown = (seconds) => {
 function setMode(nextMode) {
   mode = nextMode;
   ui.shell.dataset.mode = mode;
-  ui.partyView.hidden = mode !== 'party';
-  ui.studioView.hidden = mode !== 'studio';
+  ui.partyView.hidden = true;
+  ui.studioView.hidden = true;
+  if (engine.autoMix !== (mode === 'party')) engine.setAutoMix(mode === 'party');
   ui.partyModeButton.setAttribute('aria-pressed', String(mode === 'party'));
   ui.studioModeButton.setAttribute('aria-pressed', String(mode === 'studio'));
   if (panelOpen) closePanel();
   waveform.draw();
+}
+
+function renderHardware(snapshot) {
+  const h = ui.hardware;
+  hardwareStage.update(snapshot);
+  snapshot.decks.forEach((deck, index) => {
+    const target = h.decks[index];
+    target.state.textContent = deck.playing ? 'PLAYING' : deck.status.toUpperCase();
+    target.title.textContent = deck.track?.title || (index === 0 ? 'Load your first track' : 'Ready for the next song');
+    target.meta.textContent = deck.track?.artist || 'MP3 or WAV · local music';
+    target.time.textContent = `${formatTime(deck.elapsed)} / ${formatTime(deck.track?.duration)}`;
+    target.play.disabled = !deck.track && !snapshot.queue.length;
+    target.play.textContent = deck.playing ? `Pause ${index === 0 ? 'A' : 'B'}` : `Play ${index === 0 ? 'A' : 'B'}`;
+    target.cue.disabled = snapshot.autoMix || !deck.track || snapshot.transitioning;
+    target.load.disabled = snapshot.transitioning || snapshot.frozen || (!!snapshot.current && index === snapshot.activeDeck);
+    void hardwareWaveforms[index].setTrack(deck.track);
+    hardwareWaveforms[index].setProgress(deck.elapsed, deck.track?.duration || 0);
+    for (const key of ['channel', 'low', 'mid', 'high', 'filter']) {
+      const value = key === 'channel' ? deck.channelLevel * 100 : key === 'filter' ? deck.filterValue * 100 : deck.eq[key];
+      if (document.activeElement !== target[key]) target[key].value = String(Math.round(value));
+    }
+  });
+  const playing = snapshot.state === 'playing' || snapshot.transitioning;
+  h.mixState.textContent = snapshot.transitioning ? `TRANSITIONING ${snapshot.activeDeck === 0 ? 'A → B' : 'B → A'}` : snapshot.state === 'paused' ? 'PAUSED' : playing ? snapshot.autoMix ? 'AUTOMIX ARMED' : 'MANUAL DJ' : 'WAITING FOR MUSIC';
+  h.mixDetail.textContent = snapshot.transitioning ? `${Math.round(snapshot.crossfader)}% toward B` : snapshot.next ? `Next: ${snapshot.next.title}` : snapshot.current ? 'Queue finished after this song' : 'Add songs or try the demo';
+  h.stageStatus.textContent = snapshot.transitioning ? 'TWO DECKS / LIVE TRANSITION' : playing ? 'LOCAL AUDIO / LIVE' : 'AUDIO ENGINE READY';
+  h.stageLed.classList.toggle('is-live', playing);
+  h.aLevel.style.setProperty('--level', `${Math.round(snapshot.decks[0].level * 100)}%`);
+  h.bLevel.style.setProperty('--level', `${Math.round(snapshot.decks[1].level * 100)}%`);
+  h.play.disabled = !snapshot.current && !snapshot.queue.length;
+  h.play.textContent = playing ? 'Pause' : snapshot.state === 'paused' ? 'Resume' : snapshot.autoMix ? 'Start AutoMix' : 'Start manual set';
+  const spareLive = snapshot.decks[1 - snapshot.activeDeck].playing;
+  h.mix.disabled = !snapshot.current || (!snapshot.queue.length && !spareLive) || snapshot.state !== 'playing';
+  h.skip.disabled = !snapshot.current || !snapshot.queue.length || snapshot.state !== 'playing';
+  h.nextTitle.textContent = spareLive && !snapshot.transitioning ? `${snapshot.decks[1 - snapshot.activeDeck].track?.title} · live on other deck` : snapshot.next?.title || 'No track queued';
+  h.nextDetail.textContent = spareLive && !snapshot.transitioning ? 'Move the crossfader or press Mix now' : snapshot.current && snapshot.next && snapshot.autoMix ? `Mix in ${formatCountdown(Math.max(0, (snapshot.remaining || 0) - FADE_REMAINING))}` : snapshot.current && !snapshot.autoMix ? 'Cue and fade when you are ready' : snapshot.current ? 'Current song will finish' : 'Add music to begin';
+  h.queueCount.textContent = String(snapshot.queue.length);
+  h.demo.disabled = demoLoaded;
+  h.demo.textContent = demoLoaded ? 'Demo ready' : 'Try demo';
+  h.crossfader.disabled = snapshot.autoMix && !snapshot.transitioning;
+  if (document.activeElement !== h.crossfader) h.crossfader.value = String(snapshot.crossfader);
+  if (document.activeElement !== h.volume) h.volume.value = String(Math.round(snapshot.volume * 100));
 }
 
 function partyRow(track, subtitle, buttons, isNext = false) {
@@ -292,6 +355,7 @@ function renderDeck(snapshot, index) {
 
 function render(snapshot) {
   renderParty(snapshot);
+  renderHardware(snapshot);
   if (snapshot.activeDeck !== lastActiveDeck) setMobileDeck(snapshot.activeDeck);
   lastActiveDeck = snapshot.activeDeck;
   const playing = snapshot.state === 'playing' || snapshot.state === 'transitioning';
@@ -577,6 +641,27 @@ ui.party.openLibrary.addEventListener('click', () => openPanel('library'));
 ui.party.openQueue.addEventListener('click', () => openPanel('queue'));
 ui.partyModeButton.addEventListener('click', () => setMode('party'));
 ui.studioModeButton.addEventListener('click', () => setMode('studio'));
+ui.hardware.play.addEventListener('click', togglePlayback);
+ui.hardware.mix.addEventListener('click', () => void engine.mixNext());
+ui.hardware.skip.addEventListener('click', () => void engine.skipNext());
+ui.hardware.demo.addEventListener('click', () => void loadDemo());
+ui.hardware.library.addEventListener('click', () => openPanel('library'));
+ui.hardware.queue.addEventListener('click', () => openPanel('queue'));
+ui.hardware.reset.addEventListener('click', () => hardwareStage.resetView());
+ui.hardware.effects.addEventListener('click', () => { const reduced = ui.hardware.effects.getAttribute('aria-pressed') !== 'true'; ui.hardware.effects.setAttribute('aria-pressed', String(reduced)); hardwareStage.setReducedEffects(reduced); });
+ui.hardware.controlsToggle.addEventListener('click', () => { ui.hardware.controls.hidden = !ui.hardware.controls.hidden; ui.hardware.controlsToggle.setAttribute('aria-expanded', String(!ui.hardware.controls.hidden)); if (!ui.hardware.controls.hidden) ui.hardware.controlsClose.focus(); });
+ui.hardware.controlsClose.addEventListener('click', () => { ui.hardware.controls.hidden = true; ui.hardware.controlsToggle.setAttribute('aria-expanded', 'false'); ui.hardware.controlsToggle.focus(); });
+ui.hardware.volume.addEventListener('input', () => engine.setVolume(Number(ui.hardware.volume.value) / 100));
+ui.hardware.crossfader.addEventListener('input', () => { if (engine.autoMix) setMode('studio'); engine.setCrossfader(Number(ui.hardware.crossfader.value)); });
+for (const event of ['change', 'pointerup', 'keyup', 'blur']) ui.hardware.crossfader.addEventListener(event, () => engine.releaseCrossfader());
+ui.hardware.decks.forEach((deck, index) => {
+  deck.load.addEventListener('click', () => openPanel('library', index));
+  deck.play.addEventListener('click', () => void engine.playDeck(index));
+  deck.cue.addEventListener('click', () => engine.cueDeck(index));
+  deck.channel.addEventListener('input', () => engine.setChannelGain(index, Number(deck.channel.value) / 100));
+  for (const band of ['low', 'mid', 'high']) deck[band].addEventListener('input', () => engine.setEq(index, band, Number(deck[band].value)));
+  deck.filter.addEventListener('input', () => engine.setFilter(index, Number(deck.filter.value) / 100));
+});
 ui.party.play.addEventListener('click', togglePlayback);
 ui.party.mix.addEventListener('click', () => void engine.mixNext());
 ui.party.skip.addEventListener('click', () => void engine.skipNext());
@@ -585,6 +670,8 @@ ui.party.volume.addEventListener('input', () => engine.setVolume(Number(ui.party
 ui.partyView.addEventListener('dragover', (event) => { if (![...event.dataTransfer.types].includes('Files')) return; event.preventDefault(); ui.partyView.dataset.drop = 'true'; });
 ui.partyView.addEventListener('dragleave', (event) => { if (!ui.partyView.contains(event.relatedTarget)) ui.partyView.dataset.drop = 'false'; });
 ui.partyView.addEventListener('drop', (event) => { if (![...event.dataTransfer.types].includes('Files')) return; event.preventDefault(); ui.partyView.dataset.drop = 'false'; void addLocalFiles(event.dataTransfer.files); });
+$('#hardware-view').addEventListener('dragover', (event) => { if ([...event.dataTransfer.types].includes('Files')) event.preventDefault(); });
+$('#hardware-view').addEventListener('drop', (event) => { if (![...event.dataTransfer.types].includes('Files')) return; event.preventDefault(); void addLocalFiles(event.dataTransfer.files); });
 ui.fileButton.addEventListener('click', () => ui.fileInput.click());
 ui.fileInput.addEventListener('change', (event) => void addLocalFiles(event.target.files));
 ui.libraryButton.addEventListener('click', () => panelOpen ? closePanel() : openPanel('library'));
@@ -609,7 +696,7 @@ ui.decks.forEach((deck, index) => {
   deck.load.addEventListener('click', () => openPanel('library', index));
   deck.play.addEventListener('click', togglePlayback);
 });
-window.addEventListener('pagehide', () => { waveform.dispose(); engine.dispose(); });
+window.addEventListener('pagehide', () => { waveform.dispose(); hardwareWaveforms.forEach((view) => view.dispose()); hardwareStage.dispose(); engine.dispose(); });
 
 ui.panel.inert = true;
 setMobileDeck(0);

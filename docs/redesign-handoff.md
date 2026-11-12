@@ -1,5 +1,7 @@
 # Mixtape redesign handoff
 
+This records the earlier Party Mode iteration. The current default experience and verification are documented in [the 3D console handoff](3d-console-handoff.md).
+
 ## Review target
 
 - Branch: `feat/mixtape-party-mode-redesign`
