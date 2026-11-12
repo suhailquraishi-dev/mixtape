@@ -36,13 +36,20 @@ function label(text, x, y, z, width, height, color = '#bec2c2', size = 42) {
   canvas.width = 512;
   canvas.height = 96;
   const context = canvas.getContext('2d');
-  context.fillStyle = color;
-  context.font = `700 ${size}px Arial, sans-serif`;
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  context.fillText(text, 256, 50, 496);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  const draw = () => {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = color;
+    context.font = `600 ${size}px "Plex Condensed", "Arial Narrow", sans-serif`;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(text, 256, 49, 496);
+    texture.needsUpdate = true;
+  };
+  draw();
+  void document.fonts.load(`600 ${size}px "Plex Condensed"`).then(draw).catch(() => {});
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false }));
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.set(x, y, z);
@@ -101,12 +108,19 @@ export class ControllerStage {
     floor.receiveShadow = true;
     this.scene.add(floor);
     this.makeHardware();
+    void Promise.all([
+      document.fonts.load('600 48px "Plex Sans"'),
+      document.fonts.load('500 30px "Plex Mono"'),
+    ]).then(() => {
+      this.screens.forEach((display) => { display.last = ''; });
+      this.update(this.snapshot);
+    }).catch(() => {});
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.canvas.addEventListener('pointerdown', (event) => this.onPointerDown(event));
     this.canvas.addEventListener('pointermove', (event) => this.onPointerMove(event));
     this.canvas.addEventListener('pointerup', (event) => this.onPointerUp(event));
-    this.canvas.addEventListener('pointercancel', (event) => this.onPointerUp(event));
+    this.canvas.addEventListener('pointercancel', (event) => this.onPointerUp(event, true));
     this.canvas.addEventListener('pointerleave', () => { if (!this.active) this.tooltip.hidden = true; });
     this.canvas.addEventListener('wheel', (event) => { event.preventDefault(); this.distance = clamp(this.distance + Math.sign(event.deltaY) * .8, 10.5, 25); this.positionCamera(); }, { passive: false });
     this.resetView();
@@ -137,7 +151,7 @@ export class ControllerStage {
       board.add(screw);
       board.add(box(.08, .007, .014, rubber, x, .495, z));
     }
-    board.add(label('MIXTAPE', 0, .49, -2.95, 1.6, .25, '#d7d8d4', 56));
+    board.add(label('MIXTAPE', 0, .49, -2.95, 1.6, .25, '#e4e3de', 60));
     board.add(label('2 CHANNEL / DIGITAL MIXING SYSTEM', 0, .49, 3.03, 2.1, .14, '#92999b', 31));
     const deckCenters = [-3.65, 3.65];
     deckCenters.forEach((cx, index) => {
@@ -152,6 +166,7 @@ export class ControllerStage {
       displayCanvas.height = 176;
       const displayTexture = new THREE.CanvasTexture(displayCanvas);
       displayTexture.colorSpace = THREE.SRGBColorSpace;
+      displayTexture.anisotropy = 8;
       const display = new THREE.Mesh(new THREE.PlaneGeometry(4.20, .66), new THREE.MeshBasicMaterial({ map: displayTexture, toneMapped: false }));
       display.rotation.x = -Math.PI / 2;
       display.position.set(cx, .638, -2.18);
@@ -221,16 +236,20 @@ export class ControllerStage {
       }
       const slot = box(.14, .018, 1.45, rubber, x, .51, 1.82);
       board.add(slot);
-      const cap = box(.50, .20, .25, brightMetal, x, .63, 1.16);
-      cap.userData.control = { kind: 'channel', index, label: `Channel ${index === 0 ? 'A' : 'B'} level` };
+       const cap = box(.50, .20, .25, brightMetal.clone(), x, .63, 1.16);
+       cap.material.emissive = new THREE.Color(color);
+       cap.material.emissiveIntensity = 0;
+       cap.userData.control = { kind: 'channel', index, label: `Channel ${index === 0 ? 'A' : 'B'} level`, dragMaterial: cap.material };
       this.pickables.push(cap);
       board.add(cap);
       this.controls.push({ kind: 'channel', index, mesh: cap });
       board.add(label('LEVEL', x, .5, 2.72, .68, .13, '#abb0b1', 28));
     }
     board.add(box(1.47, .018, .12, rubber, 0, .51, 2.42));
-    const crossCap = box(.25, .19, .47, brightMetal, -.68, .63, 2.42);
-    crossCap.userData.control = { kind: 'crossfader', label: 'Crossfader · A to B' };
+    const crossCap = box(.25, .19, .47, brightMetal.clone(), -.68, .63, 2.42);
+    crossCap.material.emissive = new THREE.Color(0xd7c7aa);
+    crossCap.material.emissiveIntensity = 0;
+    crossCap.userData.control = { kind: 'crossfader', label: 'Crossfader · A to B', dragMaterial: crossCap.material };
     this.pickables.push(crossCap);
     board.add(crossCap);
     this.controls.push({ kind: 'crossfader', mesh: crossCap });
@@ -247,7 +266,10 @@ export class ControllerStage {
     top.userData.control = control;
     this.pickables.push(top);
     board.add(top);
-    board.add(label(title, x, .715, z, .57, .17, '#ece9e3', 37));
+    const face = label(title, x, .715, z, .57, .17, '#ece9e3', 39);
+    board.add(face);
+    control.pressMesh = top;
+    control.pressLabel = face;
     return topMaterial;
   }
 
@@ -257,7 +279,10 @@ export class ControllerStage {
     board.add(base);
     const knob = new THREE.Group();
     knob.position.set(x, .55, z);
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(.20, .23, .21, 32), metal);
+    const bodyMaterial = metal.clone();
+    bodyMaterial.emissive = new THREE.Color(color);
+    bodyMaterial.emissiveIntensity = 0;
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(.20, .23, .21, 32), bodyMaterial);
     body.position.y = .10;
     body.castShadow = true;
     knob.add(body);
@@ -266,7 +291,7 @@ export class ControllerStage {
     knob.add(cap);
     const marker = box(.027, .014, .12, new THREE.MeshBasicMaterial({ color }), 0, .23, -.10);
     knob.add(marker);
-    body.userData.control = { kind: band === 'filter' ? 'filter' : 'eq', index, band, label: `Deck ${index === 0 ? 'A' : 'B'} ${band === 'filter' ? 'low-pass filter' : band.toUpperCase() + ' EQ'}` };
+    body.userData.control = { kind: band === 'filter' ? 'filter' : 'eq', index, band, label: `Deck ${index === 0 ? 'A' : 'B'} ${band === 'filter' ? 'low-pass filter' : band.toUpperCase() + ' EQ'}`, dragMaterial: bodyMaterial };
     this.pickables.push(body);
     board.add(knob);
     this.controls.push({ kind: band, index, mesh: knob });
@@ -276,7 +301,7 @@ export class ControllerStage {
     this.yaw = 0;
     this.pitch = 0;
     const aspect = this.container.clientWidth / Math.max(1, this.container.clientHeight);
-    this.distance = aspect < 1.3 ? 24.5 : aspect < 1.8 ? 17.5 : 13.5;
+    this.distance = aspect < 1.3 ? 24.5 : aspect < 1.8 ? 17.5 : 10.8;
     this.positionCamera();
   }
 
@@ -297,7 +322,7 @@ export class ControllerStage {
     this.camera.updateProjectionMatrix();
     if (this.lastAspect && Math.abs(this.lastAspect - this.camera.aspect) > .25) {
       const aspect = this.camera.aspect;
-      this.distance = aspect < 1.3 ? 24.5 : aspect < 1.8 ? 17.5 : 13.5;
+      this.distance = aspect < 1.3 ? 24.5 : aspect < 1.8 ? 17.5 : 10.8;
     }
     this.lastAspect = this.camera.aspect;
     this.renderer.setPixelRatio(this.effectsReduced ? 1 : Math.min(window.devicePixelRatio || 1, 1.7));
@@ -347,16 +372,16 @@ export class ControllerStage {
     ctx.fillStyle = '#071014';
     ctx.fillRect(0, 0, 1024, 176);
     ctx.fillStyle = accent;
-    ctx.font = '700 24px Arial, sans-serif';
-    ctx.fillText(`DECK ${index === 0 ? 'A' : 'B'}  /  ${deck.playing ? 'PLAYING' : deck.status.toUpperCase()}`, 28, 38);
+    ctx.font = '600 27px "Plex Condensed", "Arial Narrow", sans-serif';
+    ctx.fillText(`DECK ${index === 0 ? 'A' : 'B'}  /  ${deck.playing ? 'PLAYING' : deck.status.toUpperCase()}`, 28, 40);
     ctx.fillStyle = '#e8f0ef';
-    ctx.font = '700 49px Arial, sans-serif';
-    ctx.fillText(deck.track?.title || 'LOAD MUSIC', 28, 103, 760);
+    ctx.font = '600 49px "Plex Sans", Arial, sans-serif';
+    ctx.fillText(deck.track?.title || 'LOAD MUSIC', 28, 101, 710);
     ctx.fillStyle = '#a7b7bb';
-    ctx.font = '26px monospace';
+    ctx.font = '500 28px "Plex Mono", Consolas, monospace';
     const duration = deck.track?.duration || 0;
     const clock = (value) => `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, '0')}`;
-    ctx.fillText(`${clock(seconds)} / ${clock(duration)}`, 778, 99);
+    ctx.fillText(`${clock(seconds)} / ${clock(duration)}`, 764, 99, 230);
     ctx.fillStyle = '#244048';
     ctx.fillRect(28, 136, 968, 8);
     ctx.fillStyle = accent;
@@ -394,11 +419,20 @@ export class ControllerStage {
     const control = this.pick(event);
     this.active = { control, x: event.clientX, y: event.clientY, lastX: event.clientX, lastY: event.clientY, moved: false, start: this.valueOf(control) };
     this.canvas.setPointerCapture(event.pointerId);
-    if (control) this.showTooltip(control, event, this.formatValue(control));
+    if (control) {
+      if (control.pressMesh) { control.pressMesh.position.y -= .035; control.pressLabel.position.y -= .035; }
+      if (control.dragMaterial) control.dragMaterial.emissiveIntensity = .22;
+      this.showTooltip(control, event, this.formatValue(control));
+      this.renderFrame();
+    }
   }
 
   onPointerMove(event) {
-    if (!this.active) { this.showTooltip(this.pick(event), event); return; }
+    if (!this.active) {
+      const control = this.pick(event);
+      this.showTooltip(control, event, this.formatValue(control));
+      return;
+    }
     const active = this.active;
     const dx = event.clientX - active.x, dy = event.clientY - active.y;
     if (Math.abs(dx) + Math.abs(dy) > 4) active.moved = true;
@@ -423,13 +457,15 @@ export class ControllerStage {
     active.lastX = event.clientX; active.lastY = event.clientY;
   }
 
-  onPointerUp(event) {
+  onPointerUp(event, cancelled = false) {
     if (!this.active) return;
     const { control, moved } = this.active;
     this.active = null;
     if (this.canvas.hasPointerCapture(event.pointerId)) this.canvas.releasePointerCapture(event.pointerId);
+    if (control?.pressMesh) { control.pressMesh.position.y += .035; control.pressLabel.position.y += .035; }
+    if (control?.dragMaterial) control.dragMaterial.emissiveIntensity = 0;
     if (control?.kind === 'crossfader') this.engine.releaseCrossfader();
-    if (control && !moved) {
+    if (control && !moved && !cancelled) {
       if (control.kind === 'play') void this.engine.playDeck(control.index);
       if (control.kind === 'cue') {
         if (this.engine.autoMix) this.actions.takeover();

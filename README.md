@@ -27,4 +27,4 @@ Music stays on the host device. The app uses browser object URLs and does not up
 
 The app is plain HTML, CSS, and JavaScript without a build step. `src/audio-engine.js` owns playback and queue state; `src/app.js` renders one shared snapshot; `src/render3d/controller.js` builds the original procedural Three.js console. The vendored Three.js module is MIT licensed; see [`vendor/THREE-LICENSE.txt`](vendor/THREE-LICENSE.txt). `src/waveform.js` computes file-derived peaks. `src/demo-audio.js` generates the demo WAV files. Run `npm run check` for syntax and unit checks.
 
-See [the 3D console handoff](docs/3d-console-handoff.md) for verification and remaining work, and [screenshots](docs/screenshots/) for the visual review.
+See [the UI and typography refinement](docs/refinement/README.md) for the three rendered type systems and before/after screenshots, [the 3D console handoff](docs/3d-console-handoff.md) for remaining work, and [screenshots](docs/screenshots/) for the earlier visual review.

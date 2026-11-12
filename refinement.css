@@ -1,0 +1,467 @@
+@font-face {
+  font-family: "Plex Sans";
+  src: url("./assets/fonts/ibm-plex-sans-latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Plex Condensed";
+  src: url("./assets/fonts/ibm-plex-sans-condensed-600-latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Plex Mono";
+  src: url("./assets/fonts/ibm-plex-mono-500-latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Plex Mono";
+  src: url("./assets/fonts/ibm-plex-mono-600-latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+:root {
+  --type-ui: "Plex Sans", Arial, sans-serif;
+  --type-instrument: "Plex Condensed", "Arial Narrow", Arial, sans-serif;
+  --type-data: "Plex Mono", Consolas, monospace;
+  --type-label-size: .75rem;
+  --type-control-size: .8125rem;
+  --type-track-size: 1.125rem;
+  --type-data-size: .8125rem;
+  --surface-deep: #0b0d0e;
+  --surface-panel: #181b1d;
+  --surface-raised: #282c2e;
+  --surface-edge: #4a5052;
+  --surface-text: #f0f0ed;
+  --surface-muted: #afb5b6;
+  --surface-warm: #d7c7aa;
+  --surface-a: #95c7d3;
+  --surface-b: #e8ad78;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.app-shell,
+.music-panel,
+.notice,
+.hardware-view button,
+.music-panel button,
+.topbar button {
+  font-family: var(--type-ui);
+}
+
+.topbar {
+  background: var(--surface-deep);
+  border-bottom-color: #414648;
+}
+
+.brand {
+  font-family: var(--type-instrument);
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: .055em;
+  line-height: .94;
+}
+
+.brand small {
+  color: #b7b9b4;
+  font-family: var(--type-instrument);
+  font-size: .625rem;
+  letter-spacing: .105em;
+  line-height: 1.2;
+  margin-top: 4px;
+}
+
+.brand-mark {
+  border-radius: 5px;
+  background: #282d2f;
+  box-shadow: inset 0 1px #ffffff36, 0 2px 8px #0007;
+}
+
+.mode-switch {
+  border-radius: 5px;
+  background: #16191b;
+  box-shadow: inset 0 1px 3px #0009;
+}
+
+.mode-switch button {
+  font-family: var(--type-ui);
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .005em;
+}
+
+.mode-switch button[aria-pressed=true] {
+  background: #353b3d;
+  box-shadow: inset 0 1px #ffffff35, 0 1px 4px #0008;
+}
+
+.topbar-center {
+  font-family: var(--type-data);
+  font-size: .6875rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .035em;
+}
+
+.topbar-actions .top-button {
+  border-radius: 5px;
+  font-size: .75rem;
+  font-weight: 600;
+  background: #292d2f;
+  box-shadow: inset 0 1px #ffffff1f, 0 2px 6px #0006;
+}
+
+.hardware-view {
+  grid-template-rows: 152px minmax(0, 1fr) 84px;
+}
+
+.hardware-ribbon {
+  background: #151819;
+  border-bottom-color: #4a4e50;
+}
+
+.ribbon-deck {
+  padding: 12px 20px 9px;
+  grid-template-rows: 18px 42px 28px 31px;
+  gap: 3px;
+}
+
+.ribbon-a { box-shadow: inset 2px 0 var(--surface-a); }
+.ribbon-b { box-shadow: inset -2px 0 var(--surface-b); }
+
+.ribbon-header {
+  font-family: var(--type-instrument);
+  font-size: var(--type-label-size);
+  font-weight: 600;
+  letter-spacing: .09em;
+  line-height: 1.2;
+  color: var(--surface-a);
+}
+
+.ribbon-b .ribbon-header { color: var(--surface-b); }
+
+.ribbon-header strong {
+  color: #ced2d0;
+  font-family: var(--type-data);
+  font-size: .625rem;
+  font-weight: 500;
+  letter-spacing: .035em;
+}
+
+.ribbon-track h1 {
+  font-family: var(--type-ui);
+  font-size: var(--type-track-size);
+  font-weight: 600;
+  letter-spacing: -.015em;
+  line-height: 1.2;
+}
+
+.ribbon-track span {
+  color: #b2bbbc;
+  font-size: .75rem;
+  line-height: 1.3;
+}
+
+.ribbon-track time {
+  font-family: var(--type-data);
+  font-size: var(--type-data-size);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: #e5e7e3;
+}
+
+.ribbon-actions button {
+  height: 30px;
+  border-radius: 4px;
+  background: #2a2e30;
+  border-color: #596063;
+  box-shadow: inset 0 1px #ffffff1c, 0 2px 4px #0005;
+  color: #f1f1ee;
+  font-size: .75rem;
+  font-weight: 600;
+  padding: 0 12px;
+}
+
+.ribbon-actions button:disabled { opacity: .48; box-shadow: none; }
+.ribbon-a .ribbon-actions button:first-child { border-color: #75a7b4; }
+.ribbon-b .ribbon-actions button:first-child { border-color: #bd8e64; }
+
+.ribbon-center {
+  gap: 5px;
+  background: #111516;
+  border-left: 1px solid #343a3c;
+  border-right: 1px solid #343a3c;
+}
+
+.ribbon-center-label,
+.dock-next span {
+  font-family: var(--type-instrument);
+  font-size: .6875rem;
+  font-weight: 600;
+  letter-spacing: .095em;
+  color: #b6babb;
+}
+
+.ribbon-center strong {
+  color: #e7ddca;
+  font-family: var(--type-data);
+  font-size: .6875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.ribbon-center small {
+  color: #b4bbbc;
+  font-family: var(--type-ui);
+  font-size: .6875rem;
+  line-height: 1.35;
+}
+
+.hardware-stage {
+  background: radial-gradient(ellipse 68% 70% at 50% 54%, #292d2f 0%, #1a1d1f 54%, #111315 100%);
+}
+
+.stage-topline,
+.stage-bottomline {
+  color: #b8bfc0;
+  font-family: var(--type-instrument);
+  font-size: .6875rem;
+  font-weight: 600;
+  letter-spacing: .085em;
+}
+
+.stage-bottomline button {
+  min-height: 32px;
+  color: #e0e4e2;
+  font-family: var(--type-ui);
+  font-size: .6875rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  border-color: #5d6669;
+  background: #282d2f;
+  box-shadow: inset 0 1px #ffffff1b, 0 2px 6px #0007;
+}
+
+.hardware-tooltip {
+  background: #15191bf2;
+  color: #f3f3ef;
+  border-color: #727a7b;
+  border-radius: 5px;
+  font-family: var(--type-data);
+  font-size: .75rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.hardware-dock {
+  background: #131617;
+  border-top-color: #444a4c;
+}
+
+.hardware-dock button,
+.hardware-controls button {
+  min-height: 42px;
+  border-radius: 5px;
+  background: #2a2f31;
+  border-color: #5a6163;
+  box-shadow: inset 0 1px #ffffff21, 0 2px 6px #0006;
+  color: var(--surface-text);
+  font-size: var(--type-control-size);
+  font-weight: 600;
+}
+
+.hardware-dock button:disabled { box-shadow: none; opacity: .45; }
+
+.hardware-dock .hardware-primary {
+  background: var(--surface-warm);
+  border-color: #ebdec6;
+  box-shadow: inset 0 1px #fff9, 0 3px 10px #0009;
+  color: #151819;
+}
+
+.dock-next strong {
+  color: #f2f1eb;
+  font-size: .9375rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.dock-next small {
+  color: #b1b9b9;
+  font-family: var(--type-data);
+  font-size: .6875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dock-actions #hardware-queue span,
+.topbar-center #track-count { font-variant-numeric: tabular-nums; }
+
+.hardware-controls {
+  background: #1a1e20;
+  border-color: #60686b;
+  border-radius: 8px;
+  overscroll-behavior: contain;
+  box-shadow: inset 0 1px #ffffff1d, 0 18px 50px #000c;
+}
+
+.hardware-controls-head strong {
+  font-family: var(--type-instrument);
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: .015em;
+}
+
+.hardware-controls-head {
+  position: sticky;
+  top: -18px;
+  z-index: 1;
+  min-height: 44px;
+  padding: 5px 0 9px;
+  background: #1a1e20;
+  border-bottom: 1px solid #464d4f;
+}
+
+.hardware-controls-head button { min-height: 32px; height: 32px; }
+.hardware-control-grid fieldset { border-color: #50575a; background: #161a1c; }
+.hardware-control-grid legend { color: #e9dcc5; font-family: var(--type-instrument); font-size: .75rem; font-weight: 600; }
+.hardware-control-grid label { color: #c1c7c8; font-size: .75rem; line-height: 1.4; }
+.hardware-control-grid p { color: #b3babb; font-size: .75rem; line-height: 1.5; }
+.hardware-control-grid input { accent-color: #d8bd95; }
+
+.music-panel {
+  border-color: #626a6c;
+  border-radius: 10px;
+  background: var(--surface-panel);
+  box-shadow: inset 0 1px #ffffff24, 0 -18px 56px #000c;
+}
+
+.panel-head { border-bottom-color: #434a4c; }
+.panel-eyebrow { color: #b7c0c1; font-family: var(--type-instrument); font-size: .6875rem; letter-spacing: .09em; }
+.panel-head h2 { color: #f1f0ed; font-family: var(--type-ui); font-size: 1.375rem; font-weight: 600; letter-spacing: -.015em; }
+.panel-actions button { font-size: .75rem; font-weight: 600; border-color: #596164; background: #2a2f31; color: #e1e6e5; }
+.panel-actions button[aria-pressed=true] { background: #d7c7aa; border-color: #ebdec6; color: #151819; }
+.panel-info { color: #c1c8c8; font-size: .75rem; }
+.panel-info span:last-child { color: #aab5b6; }
+.panel-list { overscroll-behavior: contain; scrollbar-color: #626c6e #171c1e; }
+.track-row:nth-child(even) { background: #ffffff05; }
+.track-row.is-next { border-color: #c2ae8b; background: #d7c7aa10; }
+.track-art,
+.track-art.lime,
+.track-art.peach,
+.track-art.blue,
+.track-art.lavender { background: #2d3436; border: 1px solid #596265; color: #d9d3c7; font-family: var(--type-instrument); font-size: 1.375rem; font-weight: 600; }
+.track-copy strong { color: #f1f1ed; font-family: var(--type-ui); font-size: .875rem; font-weight: 600; }
+.track-copy small { color: #b2bdbd; font-size: .75rem; }
+.track-duration { color: #b8c0c0; font-family: var(--type-data); font-size: .75rem; font-variant-numeric: tabular-nums; }
+.track-actions button { min-height: 34px; border-color: #5b6466; background: #2b3133; color: #e8ecea; font-size: .75rem; font-weight: 600; }
+.track-actions button.primary,
+.panel-empty button { background: #d7c7aa; border-color: #e8d9bd; color: #161a1a; }
+.track-actions button.square { width: 34px; }
+.panel-empty { color: #b7c1c1; font-size: .875rem; }
+.panel-empty strong { color: #f0f0eb; font-family: var(--type-ui); font-size: 1.125rem; }
+
+.notice {
+  background: #ded0b4;
+  color: #171918;
+  border: 1px solid #f0e3ca;
+  border-radius: 5px;
+  font-size: .8125rem;
+  font-weight: 600;
+}
+
+.notice.is-error { background: #f3b6a7; color: #391e1a; border-color: #ffd2c8; }
+
+:is(.hardware-view, .music-panel, .topbar) button:focus-visible,
+.hardware-control-grid input:focus-visible {
+  outline: 2px solid #efcf9d;
+  outline-offset: 3px;
+}
+
+@media (hover: hover) {
+  .hardware-dock button:hover:not(:disabled),
+  .ribbon-actions button:hover:not(:disabled),
+  .topbar-actions .top-button:hover:not(:disabled),
+  .stage-bottomline button:hover:not(:disabled),
+  .panel-actions button:hover:not(:disabled),
+  .track-actions button:hover:not(:disabled) {
+    background: #41484a;
+    border-color: #899395;
+  }
+  .hardware-dock .hardware-primary:hover:not(:disabled),
+  .track-actions button.primary:hover:not(:disabled),
+  .panel-actions button[aria-pressed=true]:hover:not(:disabled) {
+    background: #eadbc0;
+    border-color: #f1e2c6;
+    color: #151819;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hardware-dock button,
+  .ribbon-actions button,
+  .topbar-actions .top-button,
+  .stage-bottomline button,
+  .panel-actions button,
+  .track-actions button {
+    transition: background-color 120ms ease-out, border-color 120ms ease-out, scale 150ms ease-out;
+  }
+  :is(.hardware-dock, .ribbon-actions, .topbar-actions, .stage-bottomline, .panel-actions, .track-actions) button:active:not(:disabled) { scale: .96; }
+}
+
+@media (max-width: 1100px) {
+  .hardware-view { grid-template-rows: 140px minmax(0, 1fr) 104px; }
+  .hardware-ribbon { grid-template-columns: minmax(0, 1fr) 150px minmax(0, 1fr); }
+  .ribbon-center strong { font-size: .625rem; white-space: nowrap; }
+  .ribbon-deck { padding: 9px 11px 7px; grid-template-rows: 17px 37px 24px 30px; }
+  .ribbon-track h1 { font-size: 1rem; }
+  .ribbon-track time { font-size: .6875rem; }
+  .hardware-dock button { min-height: 37px; font-size: .75rem; }
+}
+
+@media (max-width: 700px) {
+  .brand { font-size: 1.125rem; }
+  .mode-switch button { font-size: .6875rem; }
+  .topbar-actions .top-button { font-size: .6875rem; }
+  .hardware-view { grid-template-rows: 132px minmax(0, 1fr) 108px; }
+  .ribbon-deck { padding: 8px 7px 6px; grid-template-rows: 16px 36px 25px 30px; gap: 2px; }
+  .ribbon-header { font-size: .6875rem; letter-spacing: .045em; }
+  .ribbon-header strong { font-size: .5625rem; }
+  .ribbon-track h1 { font-size: .875rem; max-width: 42vw; }
+  .ribbon-track span { font-size: .6875rem; }
+  .ribbon-actions button { height: 30px; min-width: 47px; padding: 0 4px; font-size: .6875rem; }
+  .stage-topline, .stage-bottomline { font-size: .625rem; }
+  .stage-bottomline button { min-height: 30px; font-size: .625rem; }
+  .hardware-dock button { min-height: 40px; height: 40px; font-size: .6875rem; }
+  .hardware-controls { bottom: 113px; }
+  .hardware-controls-head { top: -11px; }
+  .hardware-control-grid label, .hardware-control-grid p { font-size: .75rem; }
+  .music-panel { border-radius: 10px 10px 0 0; }
+  .panel-head h2 { font-size: 1.125rem; }
+  .panel-info { font-size: .6875rem; }
+  .track-copy strong { font-size: .8125rem; }
+  .track-copy small { font-size: .6875rem; }
+  .track-actions button { min-height: 32px; font-size: .6875rem; }
+}
+
+@media (max-width: 390px) {
+  .topbar { padding: 0 6px; gap: 4px; }
+  .mode-switch button { min-width: 54px; padding: 0 4px; font-size: .625rem; }
+  .ribbon-actions { gap: 2px; }
+  .ribbon-actions button { min-width: 43px; }
+}
