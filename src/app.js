@@ -447,7 +447,7 @@ function renderPanel(snapshot) {
   ui.libraryList.hidden = panelTab !== 'library';
   ui.queueList.hidden = panelTab !== 'queue';
   ui.sourceMessage.textContent = sourceMessage;
-  ui.panelInstruction.textContent = mode === 'party' ? panelTab === 'queue' ? 'Move or remove songs before the next transition.' : 'Choose what plays next or add a song to the queue.' : loadTarget === null ? panelTab === 'queue' ? 'Move or remove tracks before the next deck locks.' : 'Load a track or add it to the running order.' : `Choose a track for Deck ${loadTarget === 0 ? 'A' : 'B'}.`;
+  ui.panelInstruction.textContent = loadTarget !== null ? `Choose a track for Deck ${loadTarget === 0 ? 'A' : 'B'}.` : panelTab === 'queue' ? 'Move or remove songs before the next transition.' : 'Load a track on the free deck or add it to the queue.';
   if (panelTab === 'library') {
     ui.libraryList.replaceChildren();
     if (!snapshot.library.length) {
@@ -465,9 +465,9 @@ function renderPanel(snapshot) {
         const queued = snapshot.queue.some((item) => item.id === track.id);
         const isCurrent = snapshot.current?.id === track.id;
         const target = loadTarget === null ? snapshot.current ? 1 - snapshot.activeDeck : 0 : loadTarget;
-        const label = mode === 'party' ? `${snapshot.current ? 'Play next' : 'Play first'}: ${track.title}` : `Load ${track.title} on Deck ${target === 0 ? 'A' : 'B'}`;
-        const load = makeButton(mode === 'party' ? snapshot.current ? 'Play next' : 'Play first' : `Load ${target === 0 ? 'A' : 'B'}`, label, () => {
-          const accepted = mode === 'party' && snapshot.current ? engine.selectNext(track.id) : engine.selectForDeck(track.id, target);
+        const label = `Load ${track.title} on Deck ${target === 0 ? 'A' : 'B'}`;
+        const load = makeButton(`Load ${target === 0 ? 'A' : 'B'}`, label, () => {
+          const accepted = engine.selectForDeck(track.id, target);
           if (accepted) closePanel();
           else showNotice('That deck is locked during this transition.', true);
         }, { className: 'primary', disabled: track.unavailable || isCurrent || snapshot.transitioning || snapshot.frozen || (!!snapshot.current && target === snapshot.activeDeck) });
@@ -490,7 +490,7 @@ function renderPanel(snapshot) {
     } else {
       snapshot.queue.forEach((track, index) => {
         const locked = snapshot.transitioning || snapshot.frozen;
-        const load = makeButton(index === 0 && snapshot.preparedId === track.id ? 'Ready' : mode === 'party' ? 'Play next' : 'Load next', `${mode === 'party' ? 'Play' : 'Load'} ${track.title} next`, () => { void engine.selectNext(track.id); closePanel(); }, { className: 'primary', disabled: locked || (index === 0 && snapshot.preparedId === track.id && snapshot.preparedState === 'ready') });
+        const load = makeButton(index === 0 && snapshot.preparedId === track.id ? 'Ready' : 'Load next', `Load ${track.title} next`, () => { void engine.selectNext(track.id); closePanel(); }, { className: 'primary', disabled: locked || (index === 0 && snapshot.preparedId === track.id && snapshot.preparedState === 'ready') });
         const up = makeButton('↑', `Move ${track.title} up`, () => movePanelQueue(track.id, track.title, -1), { className: 'square', disabled: locked || index === 0 });
         const down = makeButton('↓', `Move ${track.title} down`, () => movePanelQueue(track.id, track.title, 1), { className: 'square', disabled: locked || index === snapshot.queue.length - 1 });
         const remove = makeButton('×', `Remove ${track.title} from queue`, () => { if (engine.removeFromQueue(track.id)) ui.panelClose.focus(); }, { className: 'square', disabled: locked });
@@ -598,7 +598,7 @@ async function loadDemo() {
     ui.demoButton.textContent = 'Demo ready';
     ui.party.demoButton.textContent = 'Demo ready';
     sourceMessage = 'Four original demo sounds ready';
-    showNotice('Four original demo sounds loaded. Press Start party.');
+    showNotice('Four original demo sounds loaded. Press Start AutoMix or switch to Manual DJ.');
   } catch (error) {
     demoLoaded = false;
     ui.demoButton.disabled = false;
