@@ -4,4 +4,4 @@ The repository is a buildless HTML/CSS/JavaScript app. `src/audio-engine.js` own
 
 The current console plays real demo and local WAV audio, rejects corrupt files, and lets the host manually load, mix, and reorder. Its default full-deck layout obscures the simple start flow. It requires two tracks to begin, has no file-derived waveform, no drag/drop, and no always-visible desktop library or queue. The audio engine can be reused without a framework migration.
 
-This branch adds a simple Party Mode around the same engine, keeps the current console as Studio Mode, permits a one-track set, adds real file-derived waveform peaks and queue drag/drop, and shares all transport and queue state across modes. The preview and manual browser checks will verify that switching modes does not interrupt audio.
+This branch adds a simple Party Mode around the same engine, keeps the current console as Studio Mode, permits a one-track set, adds real file-derived waveform peaks and queue drag/drop, and shares all transport and queue state across modes. Manual browser checks verified that switching modes did not interrupt active audio.

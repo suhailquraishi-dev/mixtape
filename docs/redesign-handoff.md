@@ -4,6 +4,8 @@
 
 - Branch: `feat/mixtape-party-mode-redesign`
 - Base: `main` at `39157d3`
+- Pull request: https://github.com/suhailquraishi-dev/mixtape/pull/1
+- Vercel preview: https://mixtape-git-feat-mixtape-p-0fb0e9-suhailquraishi-5594s-projects.vercel.app/
 - Run locally: `npm start`, then open `http://localhost:8000`
 
 ## What changed
@@ -20,6 +22,7 @@
 - Browser checks: demo loading, one-song playback, local MP3 and WAV imports and playback, MP3-to-WAV automatic transition, Mix Now, Skip, queue reorder with drag and keyboard controls, mode switching during playback, corrupt-file rejection, and queue exhaustion. Switching to Studio and back retained elapsed playback.
 - Layout checked at 1440×900, 1366×768, 1024×768, and 390×844. Party Mode and the mobile Studio view had no document overflow; narrow-screen library and queue panels remained reachable.
 - Short manual audio sequences were tested. The requested uninterrupted 30-minute playlist smoke test was **not completed**; long-run silence, gain, and source-lifecycle behavior remains to be checked before production promotion.
+- Vercel preview opened successfully after deployment; four demo tracks loaded and Start party entered live playback.
 
 ## Screenshots
 
