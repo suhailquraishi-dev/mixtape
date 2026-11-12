@@ -5,6 +5,6 @@
   "type": "module",
   "scripts": {
     "start": "node dev-server.mjs",
-    "check": "node --check src/app.js && node --check src/audio-engine.js && node --check src/demo-audio.js && node --check src/timing.js && node --check dev-server.mjs && node --test test/timing.test.js"
+    "check": "node --check src/app.js && node --check src/audio-engine.js && node --check src/demo-audio.js && node --check src/timing.js && node --check src/waveform.js && node --check dev-server.mjs && node --test test/audio-engine.test.js test/timing.test.js test/waveform.test.js"
   }
 }

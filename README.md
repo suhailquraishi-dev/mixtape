@@ -1,32 +1,29 @@
-# AutoMix Party
+# Mixtape
 
-A single-screen, two-deck DJ console for hosting a continuous music set. The console fills the browser viewport. The library and queue open in a panel that scrolls independently.
+Mixtape is a browser-based party music player. **Party Mode** is the default: add local music, see what is playing and what comes next, and let AutoMix keep the set moving. **Studio Mode** reveals the two decks and crossfader for hosts who want more control. Switching modes does not restart playback.
 
-## Run it
+## Run
 
 ```powershell
 npm start
 ```
 
-Open `http://localhost:8000`. Load the four original demo sounds or add local MP3/PCM WAV files, then press **Start set**. Audio begins after a user click.
+Open `http://localhost:8000`. Use **Add music** to select multiple MP3 or PCM WAV files, drag files onto Party Mode, or choose **Try demo** for four original synthesized songs. A single song can play normally. Add at least two for continuous transitions.
 
-## Playing a set
+## Controls
 
-- The top strip shows when to load the next track. If you do nothing, AutoMix prepares the first eligible queued track when the current track has 15 seconds left. The next choice locks at 10 seconds and an equal-power fade starts with up to 5 seconds left.
-- **Load A/B** opens the library to choose a deck. A manually loaded next track takes priority over the queue's previous first track. The queue panel lets you reorder or remove tracks before it locks.
-- **Mix next** starts a transition immediately. During an overlap, the crossfader controls the two deck gains; releasing it lets the smooth fade finish from that position.
-- **AutoMix OFF** stops automatic loading and transitions. The current track ends normally. You can still use Mix next.
-- Pause freezes the playback countdown and any active transition. Master level adjusts output volume.
+- **Start party**, **Pause**, and **Resume** control actual local audio. **Mix now** fades into the first queued song. **Skip** advances with a short fade.
+- AutoMix prepares the next song at 15 seconds remaining, locks the choice at 10 seconds, and begins a real equal-power crossfade with up to 5 seconds remaining. Turning AutoMix off lets the current song finish without an automatic transition.
+- The library shows file-derived names and durations. Search it, add played songs back to the queue, or remove demo tracks with **Clear demos**. Reorder the queue by dragging a song or using its labeled up/down buttons.
+- The waveform is calculated from the selected audio file and advances with real playback time. Files larger than 24 MB or files the browser cannot decode still play when supported, but show a truthful unavailable preview.
+- Studio Mode uses the same queue and audio engine. Its deck load buttons, transport, master volume, and overlap crossfader control the real audio graph.
 
-At narrow widths, the Deck A and Deck B tabs switch the visible deck while playback and AutoMix controls stay on screen. The visible tab follows the active deck after a transition.
+## Privacy and scope
 
-## Current scope
+Music stays on the host device. The app uses browser object URLs and does not upload local audio. Library and queue state last only for the current tab; reloading clears them. There is no account, streaming catalogue, beatmatching, key analysis, or saved session yet.
 
-- Audio plays only on the host device. Local audio is read through browser object URLs and is not uploaded.
-- Demo sounds are synthesized in the browser. They are not a commercial music catalogue.
-- The library, queue, and set are temporary browser-tab state. Refreshing the page stops audio and clears them.
-- Guest rooms, requests, saved sessions, track analysis, loudness normalization, beat alignment, and provider integrations are future work.
+## Development
 
-## Implementation
+The app is plain HTML, CSS, and JavaScript without a build step or production dependencies. `src/audio-engine.js` owns playback and queue state; `src/app.js` renders both modes from its snapshots. `src/waveform.js` computes file-derived waveform peaks. `src/demo-audio.js` generates original WAV demo tracks. Run `npm run check` for syntax and unit tests.
 
-The app uses plain HTML, CSS, and JavaScript without a build step or external JavaScript dependencies. `src/audio-engine.js` owns playback and exposes a single snapshot to `src/app.js`. Web Audio routes two `HTMLAudioElement` decks through separate gain and analyser nodes to a master gain. `src/demo-audio.js` generates PCM WAV demo tracks; `src/timing.js` holds countdown and fade math. Run `npm run check` for syntax and timing checks.
+See [the redesign audit](docs/redesign-audit.md) and [review screenshots](docs/screenshots/).

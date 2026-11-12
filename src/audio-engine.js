@@ -122,6 +122,19 @@ export class AudioEngine {
     return true;
   }
 
+  moveQueueTo(id, beforeId) {
+    if (this.transition || this.frozen || id === beforeId) return false;
+    const from = this.queue.indexOf(id);
+    const target = this.queue.indexOf(beforeId);
+    if (from < 0 || target < 0) return false;
+    this.queue.splice(from, 1);
+    this.queue.splice(this.queue.indexOf(beforeId), 0, id);
+    if (this.preparedId && this.queue[0] !== this.preparedId) this.unloadNext();
+    this.preStartNextId = null;
+    this.emit();
+    return true;
+  }
+
   removeFromQueue(id) {
     if (this.transition || this.frozen) return false;
     const index = this.queue.indexOf(id);
@@ -137,6 +150,18 @@ export class AudioEngine {
     const track = this.tracks.get(id);
     if (!track || track.unavailable || id === this.currentId || this.queue.includes(id)) return false;
     this.queue.push(id);
+    this.emit();
+    return true;
+  }
+
+  removeTrack(id) {
+    const track = this.tracks.get(id);
+    if (!track || id === this.currentId || this.transition?.id === id) return false;
+    this.queue = this.queue.filter((item) => item !== id);
+    if (this.preparedId === id) this.unloadNext();
+    if (this.preStartNextId === id) this.preStartNextId = null;
+    this.tracks.delete(id);
+    URL.revokeObjectURL(track.url);
     this.emit();
     return true;
   }
@@ -248,8 +273,8 @@ export class AudioEngine {
 
   async start() {
     if (this.state !== 'ready' && this.state !== 'ended') return false;
-    if (this.queue.length < (this.state === 'ready' ? 2 : 1)) {
-      this.say('Add at least two playable tracks to start.', true);
+    if (!this.queue.length) {
+      this.say('Add a playable track to start.', true);
       return false;
     }
     try {
@@ -327,7 +352,12 @@ export class AudioEngine {
     return this.beginTransition(true);
   }
 
-  async beginTransition(manual = false) {
+  async skipNext() {
+    if (this.state !== 'playing' || !this.queue.length || this.transitionPending) return false;
+    return this.beginTransition(true, 0.35);
+  }
+
+  async beginTransition(manual = false, requestedDuration = null) {
     if (this.transition || this.transitionPending || this.state !== 'playing' || !this.queue.length) return false;
     this.transitionPending = true;
     const id = this.queue[0];
@@ -348,7 +378,7 @@ export class AudioEngine {
       }
       const outgoing = this.decks[this.activeDeck].audio;
       const remaining = Math.max(.25, outgoing.duration - outgoing.currentTime);
-      const duration = fadeDuration(remaining, incoming.audio.duration || this.tracks.get(id).duration);
+      const duration = requestedDuration === null ? fadeDuration(remaining, incoming.audio.duration || this.tracks.get(id).duration) : Math.max(.25, Math.min(requestedDuration, remaining));
       this.transition = { incomingIndex, id, duration, startedAt: performance.now(), progress: 0, fromProgress: 0, manualControl: false };
       this.frozen = true;
       this.state = 'transitioning';

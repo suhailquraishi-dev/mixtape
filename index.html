@@ -4,19 +4,46 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0b0d10" />
-    <meta name="description" content="AutoMix Party is a two-deck browser console that keeps the music moving." />
-    <title>AutoMix Party — Console</title>
+    <meta name="description" content="Mixtape keeps your party music flowing with a simple browser player and an optional DJ studio." />
+    <title>Mixtape — Your party, on autopilot</title>
     <link rel="stylesheet" href="./styles.css" />
     <script type="module" src="./src/app.js"></script>
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>AUTO<span class="brand-accent">MIX</span><small>PARTY CONSOLE</small></span></div>
+        <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>MIX<span class="brand-accent">TAPE</span><small>YOUR PARTY. ON AUTOPILOT.</small></span></div>
+        <nav class="mode-switch" aria-label="Workspace mode"><button id="party-mode-button" type="button" aria-pressed="true">Party</button><button id="studio-mode-button" type="button" aria-pressed="false">Studio</button></nav>
         <div class="topbar-center"><span class="live-dot" aria-hidden="true"></span><span id="session-status">STANDBY</span><span class="top-divider"></span><span id="track-count">0 TRACKS</span></div>
-        <div class="topbar-actions"><button id="demo-button" class="top-button" type="button">Load demo</button><button id="file-button" class="top-button" type="button">Add files</button><input id="file-input" type="file" accept=".mp3,.wav,audio/mpeg,audio/wav,audio/x-wav" multiple hidden /><button id="library-button" class="top-button top-button-strong" type="button" aria-expanded="false" aria-controls="music-panel">Music <span aria-hidden="true">▥</span></button></div>
+        <div class="topbar-actions"><button id="demo-button" class="top-button" type="button">Try demo</button><button id="file-button" class="top-button" type="button">Add music</button><input id="file-input" type="file" accept=".mp3,.wav,audio/mpeg,audio/wav,audio/x-wav" multiple hidden /><button id="library-button" class="top-button top-button-strong" type="button" aria-expanded="false" aria-controls="music-panel">Library <span aria-hidden="true">▥</span></button></div>
       </header>
 
+      <main id="party-view" class="party-layout" aria-label="Party Mode">
+        <aside class="party-rail library-rail" aria-labelledby="party-library-heading">
+          <div class="rail-heading"><div><span class="rail-eyebrow">YOUR COLLECTION</span><h2 id="party-library-heading">Music library <small id="party-library-count">0</small></h2></div><button id="party-import-button" type="button" class="rail-icon-button" aria-label="Add local music files">＋</button></div>
+          <label class="library-search"><span aria-hidden="true">⌕</span><input id="party-search" type="search" placeholder="Find a song" aria-label="Search music library" /></label>
+          <div id="party-library-list" class="rail-list" role="list"></div>
+          <div class="rail-footer"><span>Local files stay on this device.</span><button id="party-clear-demo" type="button" hidden>Clear demos</button></div>
+        </aside>
+
+        <section class="party-center" aria-labelledby="party-section-heading">
+          <div class="party-heading"><div><span class="rail-eyebrow">AUTOMATIC MIXING</span><h1 id="party-section-heading">The music, handled.</h1></div><span id="party-output-status" class="output-status">Ready for music</span></div>
+          <div id="party-empty" class="party-empty"><div class="empty-symbol" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div><span class="empty-overline">WELCOME TO MIXTAPE</span><h2 id="party-empty-title">Add your music. We'll keep it flowing.</h2><p id="party-empty-detail">Choose local MP3 or WAV files, or try our original demo sounds.</p><div class="empty-actions"><button id="party-add-button" class="party-primary" type="button">Add music</button><button id="party-demo-button" class="party-secondary" type="button">Try demo</button></div><small id="party-import-status" role="status" aria-live="polite">No files leave this device.</small></div>
+          <div id="party-player" class="party-player" hidden>
+            <div class="playing-heading"><span id="party-playing-label">READY TO PLAY</span><span id="party-track-source">LOCAL MUSIC</span></div>
+            <div class="playing-identity"><div id="party-cover" class="party-cover" aria-hidden="true"><span id="party-cover-mark">M</span></div><div class="playing-copy"><h2 id="party-track-title">Choose a track</h2><p id="party-track-artist">Mixtape</p><span id="party-track-note">Start your party when you're ready.</span></div></div>
+            <div class="waveform-frame"><div class="waveform-heading"><span>TRACK WAVEFORM</span><span id="waveform-state">Reading audio…</span></div><canvas id="party-waveform" aria-label="Waveform from the selected audio file"></canvas><div class="waveform-times"><span id="party-elapsed">0:00</span><span id="party-duration">0:00</span></div></div>
+            <div class="party-transition"><div class="transition-icon" aria-hidden="true">↗</div><div><strong id="party-transition-title">Waiting for a track</strong><span id="party-transition-detail">Add songs to keep the set going.</span></div><span id="party-transition-time">—</span></div>
+            <div class="party-controls"><button id="party-play-button" class="party-primary party-play" type="button">Start party</button><button id="party-mix-button" class="party-secondary" type="button" disabled>Mix now</button><button id="party-skip-button" class="party-secondary" type="button" disabled>Skip</button><div class="party-auto-wrap"><span>AUTOMIX</span><button id="party-auto-button" type="button" aria-pressed="true">On</button></div></div>
+            <div class="party-volume"><label for="party-volume-input">Master volume</label><input id="party-volume-input" type="range" min="0" max="100" value="70" /><span id="party-volume-value">70%</span></div>
+          </div>
+          <div class="party-bottom"><span id="party-bottom-status">Add a song to begin.</span><button id="party-open-library" type="button" aria-controls="music-panel">Library</button><button id="party-open-queue" type="button" aria-controls="music-panel">Up next <span id="party-mobile-queue-count">0</span></button></div>
+        </section>
+
+        <aside class="party-rail queue-rail" aria-labelledby="party-queue-heading"><div class="rail-heading"><div><span class="rail-eyebrow">RUNNING ORDER</span><h2 id="party-queue-heading">Up next <small id="party-queue-count">0</small></h2></div><button id="party-queue-add" class="rail-icon-button" type="button" aria-label="Add music to queue">＋</button></div><p class="queue-explainer">Drag songs to reorder, or use the arrow buttons.</p><div id="party-queue-list" class="rail-list" role="list"></div><div class="rail-footer"><span id="party-queue-footer">Your queue is waiting.</span></div></aside>
+      </main>
+
+      <div id="studio-view" class="studio-shell" hidden>
       <section class="command-bar" aria-label="Automatic mixing controls">
         <div class="command-info"><div class="command-overline"><span class="command-led" aria-hidden="true"></span> AUTO MIX CONTROL</div><div id="deadline-title" class="deadline-title">Load two tracks to start</div><p id="deadline-detail" class="deadline-detail">Use the original demo sounds or add your own local MP3 and WAV files.</p><div class="timing-rail" aria-hidden="true"><span id="timing-fill"></span></div></div>
         <div class="command-controls"><button id="auto-button" class="auto-button" type="button" aria-pressed="true"><span class="toggle-light" aria-hidden="true"></span><span>AutoMix <strong id="auto-label">ON</strong></span></button><button id="protect-button" class="secondary-button" type="button" disabled aria-pressed="false">Finish song</button><button id="next-button" class="secondary-button" type="button" disabled>Mix next <span aria-hidden="true">↗</span></button><button id="transport-button" class="transport-button" type="button" disabled><span id="transport-symbol" aria-hidden="true">▶</span><span id="transport-label">Start set</span></button></div>
@@ -43,6 +70,7 @@
         </div>
         <div class="studio-foot"><div><span class="foot-led" aria-hidden="true"></span><span id="foot-status">Two decks. One continuous set.</span></div><button id="queue-button" type="button" aria-expanded="false" aria-controls="music-panel">UP NEXT <strong id="queue-count">0</strong> <span aria-hidden="true">⌃</span></button></div>
       </main>
+      </div>
 
       <section id="music-panel" class="music-panel" aria-labelledby="panel-title" aria-hidden="true"><div class="panel-head"><div><span class="panel-eyebrow">YOUR MUSIC</span><h2 id="panel-title">Music library</h2></div><div class="panel-actions"><button id="panel-library-tab" type="button" aria-pressed="true">Library</button><button id="panel-queue-tab" type="button" aria-pressed="false">Queue <span id="panel-queue-count">0</span></button><button id="panel-close" class="panel-close" type="button" aria-label="Close music panel">×</button></div></div><div class="panel-info"><span id="panel-instruction">Choose a track to load, or add it to the queue.</span><span id="source-message">Local files stay on this device.</span></div><div id="library-list" class="panel-list" role="list"></div><div id="queue-list" class="panel-list" role="list" hidden></div></section>
       <div id="notice" class="notice" role="status" aria-live="polite"></div>
