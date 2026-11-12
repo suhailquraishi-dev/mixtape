@@ -26,6 +26,7 @@ export class AudioEngine {
     this.autoMix = true;
     this.protectCurrent = false;
     this.activeDeck = 0;
+    this.preselected = [null, null];
     this.currentId = null;
     this.preparedId = null;
     this.preparedBy = null;
@@ -38,6 +39,7 @@ export class AudioEngine {
     this.prepareToken = 0;
     this.playedCount = 0;
     this.volume = 0.7;
+    this.manualCrossfader = 0;
     this.notice = '';
     this.noticeIsError = false;
     this.context = null;
@@ -46,7 +48,7 @@ export class AudioEngine {
       const audio = new Audio();
       audio.preload = 'auto';
       audio.addEventListener('ended', () => void this.onDeckEnded(index));
-      return { audio, trackId: null, gain: null, analyser: null, level: 0 };
+      return { audio, trackId: null, gain: null, channelGain: null, filters: null, analyser: null, level: 0, channelLevel: 1, eq: { low: 0, mid: 0, high: 0 }, filterValue: 0, manualPlaying: false };
     });
     this.clock = setInterval(() => this.pulse(), 100);
   }
@@ -79,18 +81,20 @@ export class AudioEngine {
       let track = this.tracks.get(deck.trackId) || null;
       let status = 'empty';
       if (!this.currentId && (this.state === 'ready' || this.state === 'ended')) {
-        track = this.tracks.get(this.queue[index]) || null;
+        track = this.tracks.get(this.preselected[index] || this.queue[index]) || null;
         if (track) status = 'queued';
       } else if (index === this.activeDeck && current) {
         track = current;
-        status = this.state === 'paused' ? 'paused' : 'on air';
+        status = deck.audio.paused ? 'paused' : 'on air';
+      } else if (deck.manualPlaying && !deck.audio.paused) {
+        status = 'on air';
       } else if (this.preparedId && deck.trackId === this.preparedId) {
         status = this.transition ? 'mixing' : this.preparedState;
       } else if (index !== this.activeDeck && next) {
         track = next;
         status = 'queued';
       }
-      return { track, status, elapsed: deck.audio.currentTime, level: deck.level, isActive: index === this.activeDeck && !!current };
+      return { track, status, elapsed: deck.audio.currentTime, level: deck.level, playing: !!deck.trackId && !deck.audio.paused, channelLevel: deck.channelLevel, eq: { ...deck.eq }, filterValue: deck.filterValue, isActive: index === this.activeDeck && !!current };
     });
     return {
       state: this.state, autoMix: this.autoMix, protectCurrent: this.protectCurrent,
@@ -98,7 +102,7 @@ export class AudioEngine {
       library: [...this.tracks.values()], decks: deckInfo, preparedId: this.preparedId,
       preparedState: this.preparedState, preparedBy: this.preparedBy,
       frozen: this.frozen, transitioning: !!this.transition,
-      crossfader: this.transition ? Math.round((this.activeDeck === 0 ? this.transition.progress : 1 - this.transition.progress) * 100) : this.activeDeck * 100,
+      crossfader: this.transition ? Math.round((this.activeDeck === 0 ? this.transition.progress : 1 - this.transition.progress) * 100) : this.autoMix ? this.activeDeck * 100 : this.manualCrossfader,
       elapsed, duration, remaining, playedCount: this.playedCount, volume: this.volume,
       notice: this.notice, noticeIsError: this.noticeIsError,
     };
@@ -122,6 +126,19 @@ export class AudioEngine {
     return true;
   }
 
+  moveQueueTo(id, beforeId) {
+    if (this.transition || this.frozen || id === beforeId) return false;
+    const from = this.queue.indexOf(id);
+    const target = this.queue.indexOf(beforeId);
+    if (from < 0 || target < 0) return false;
+    this.queue.splice(from, 1);
+    this.queue.splice(this.queue.indexOf(beforeId), 0, id);
+    if (this.preparedId && this.queue[0] !== this.preparedId) this.unloadNext();
+    this.preStartNextId = null;
+    this.emit();
+    return true;
+  }
+
   removeFromQueue(id) {
     if (this.transition || this.frozen) return false;
     const index = this.queue.indexOf(id);
@@ -129,6 +146,7 @@ export class AudioEngine {
     this.queue.splice(index, 1);
     if (this.preparedId === id) this.unloadNext();
     if (this.preStartNextId === id) this.preStartNextId = null;
+    this.preselected = this.preselected.map((item) => item === id ? null : item);
     this.emit();
     return true;
   }
@@ -141,10 +159,24 @@ export class AudioEngine {
     return true;
   }
 
+  removeTrack(id) {
+    const track = this.tracks.get(id);
+    if (!track || id === this.currentId || this.transition?.id === id) return false;
+    this.queue = this.queue.filter((item) => item !== id);
+    if (this.preparedId === id) this.unloadNext();
+    if (this.preStartNextId === id) this.preStartNextId = null;
+    this.preselected = this.preselected.map((item) => item === id ? null : item);
+    this.tracks.delete(id);
+    URL.revokeObjectURL(track.url);
+    this.emit();
+    return true;
+  }
+
   selectForDeck(id, index) {
     const track = this.tracks.get(id);
     if (!track || track.unavailable || (this.currentId === id)) return false;
     if (this.state === 'ready' || this.state === 'ended') {
+      this.preselected[index] = id;
       const oldIndex = this.queue.indexOf(id);
       if (oldIndex >= 0) this.queue.splice(oldIndex, 1);
       const position = index === 0 ? 0 : Math.min(1, this.queue.length);
@@ -176,12 +208,106 @@ export class AudioEngine {
     this.masterGain.connect(this.context.destination);
     this.decks.forEach((deck, index) => {
       const source = this.context.createMediaElementSource(deck.audio);
+      const low = this.context.createBiquadFilter();
+      low.type = 'lowshelf'; low.frequency.value = 220; low.gain.value = deck.eq.low;
+      const mid = this.context.createBiquadFilter();
+      mid.type = 'peaking'; mid.frequency.value = 1100; mid.Q.value = .8; mid.gain.value = deck.eq.mid;
+      const high = this.context.createBiquadFilter();
+      high.type = 'highshelf'; high.frequency.value = 3200; high.gain.value = deck.eq.high;
+      const filter = this.context.createBiquadFilter();
+      filter.type = 'lowpass'; filter.frequency.value = this.filterFrequency(deck.filterValue);
+      deck.filters = { low, mid, high, filter };
+      deck.channelGain = this.context.createGain();
+      deck.channelGain.gain.value = deck.channelLevel;
       deck.gain = this.context.createGain();
       deck.gain.gain.value = index === this.activeDeck ? 1 : 0;
       deck.analyser = this.context.createAnalyser();
       deck.analyser.fftSize = 256;
-      source.connect(deck.gain).connect(deck.analyser).connect(this.masterGain);
+      source.connect(low).connect(mid).connect(high).connect(filter).connect(deck.channelGain).connect(deck.gain).connect(deck.analyser).connect(this.masterGain);
     });
+  }
+
+  filterFrequency(value) {
+    return 20000 * Math.pow(450 / 20000, Math.max(0, Math.min(1, value)));
+  }
+
+  setChannelGain(index, value) {
+    const deck = this.decks[index];
+    if (!deck) return;
+    deck.channelLevel = Math.max(0, Math.min(1, value));
+    if (deck.channelGain) deck.channelGain.gain.setTargetAtTime(deck.channelLevel, this.context.currentTime, .012);
+    this.emit();
+  }
+
+  setEq(index, band, value) {
+    const deck = this.decks[index];
+    if (!deck || !['low', 'mid', 'high'].includes(band)) return;
+    deck.eq[band] = Math.max(-12, Math.min(12, value));
+    if (deck.filters) deck.filters[band].gain.setTargetAtTime(deck.eq[band], this.context.currentTime, .012);
+    this.emit();
+  }
+
+  setFilter(index, value) {
+    const deck = this.decks[index];
+    if (!deck) return;
+    deck.filterValue = Math.max(0, Math.min(1, value));
+    if (deck.filters) deck.filters.filter.frequency.setTargetAtTime(this.filterFrequency(deck.filterValue), this.context.currentTime, .012);
+    this.emit();
+  }
+
+  nudgeDeck(index, seconds) {
+    if (this.autoMix || this.transition) return;
+    const audio = this.decks[index]?.audio;
+    if (!audio || !Number.isFinite(audio.duration)) return;
+    audio.currentTime = Math.max(0, Math.min(audio.duration - .05, audio.currentTime + seconds));
+    this.emit();
+  }
+
+  cueDeck(index) {
+    if (this.autoMix || this.transition) return;
+    const deck = this.decks[index];
+    if (!deck?.trackId) return;
+    deck.audio.pause();
+    deck.audio.currentTime = 0;
+    deck.manualPlaying = false;
+    if (this.decks.every((item) => item.audio.paused)) this.state = 'paused';
+    this.emit();
+  }
+
+  async playDeck(index) {
+    if (this.autoMix) {
+      if (!this.currentId) { this.activeDeck = index; return this.start(); }
+      if (index !== this.activeDeck) return this.mixNext();
+      if (this.state === 'paused') return this.resume();
+      this.pause();
+      return true;
+    }
+    if (!this.currentId) { this.activeDeck = index; this.manualCrossfader = index * 100; return this.start(); }
+    let deck = this.decks[index];
+    if (!deck.trackId && index !== this.activeDeck && this.queue.length) {
+      if (!await this.prepareNext(this.queue[0], 'manual')) return false;
+      deck = this.decks[index];
+    }
+    if (!deck.trackId) return false;
+    try {
+      this.createGraph();
+      await this.context.resume();
+      if (deck.audio.paused) {
+        if (deck.audio.ended) deck.audio.currentTime = 0;
+        await deck.audio.play();
+        deck.manualPlaying = true;
+        if (index !== this.activeDeck) this.queue = this.queue.filter((item) => item !== deck.trackId);
+      } else {
+        deck.audio.pause();
+        deck.manualPlaying = false;
+      }
+      this.state = this.decks.every((item) => item.audio.paused) ? 'paused' : 'playing';
+      this.setCrossfader(this.manualCrossfader);
+      return true;
+    } catch (error) {
+      this.say(`Deck ${index === 0 ? 'A' : 'B'} could not play: ${error.message || 'check the audio file.'}`, true);
+      return false;
+    }
   }
 
   loadDeck(index, track) {
@@ -200,6 +326,7 @@ export class AudioEngine {
     deck.audio.removeAttribute('src');
     deck.audio.load();
     deck.trackId = null;
+    deck.manualPlaying = false;
     deck.level = 0;
     if (deck.gain) deck.gain.gain.value = 0;
   }
@@ -248,28 +375,32 @@ export class AudioEngine {
 
   async start() {
     if (this.state !== 'ready' && this.state !== 'ended') return false;
-    if (this.queue.length < (this.state === 'ready' ? 2 : 1)) {
-      this.say('Add at least two playable tracks to start.', true);
+    if (!this.queue.length) {
+      this.say('Add a playable track to start.', true);
       return false;
     }
     try {
       this.createGraph();
       await this.context.resume();
-      const id = this.queue[0];
+      const id = this.preselected[this.activeDeck] || this.queue[0];
       const deck = this.loadDeck(this.activeDeck, this.tracks.get(id));
       deck.gain.gain.value = 1;
       await deck.audio.play();
-      this.currentId = this.queue.shift();
+      this.currentId = id;
+      this.queue.splice(this.queue.indexOf(id), 1);
       this.playedCount += 1;
       this.protectCurrent = false;
       this.frozen = false;
       this.state = 'playing';
-      this.say('AutoMix is ready. Your music stays on this device.');
-      if (this.preStartNextId && this.queue.includes(this.preStartNextId)) {
-        const next = this.preStartNextId;
+      if (!this.autoMix) { this.manualCrossfader = this.activeDeck * 100; this.setCrossfader(this.manualCrossfader); }
+      this.say(this.autoMix ? 'AutoMix is ready. Your music stays on this device.' : 'Manual deck is playing. Use the mixer to shape the sound.');
+      const chosenNext = this.preselected[1 - this.activeDeck] || this.preStartNextId;
+      if (chosenNext && this.queue.includes(chosenNext)) {
+        const next = chosenNext;
         this.preStartNextId = null;
         void this.prepareNext(next, 'manual');
       }
+      this.preselected = [null, null];
       return true;
     } catch (error) {
       this.state = 'ready';
@@ -284,6 +415,7 @@ export class AudioEngine {
     this.pausedAt = performance.now();
     this.decks[this.activeDeck].audio.pause();
     if (this.transition) this.decks[this.transition.incomingIndex].audio.pause();
+    else if (!this.autoMix) this.decks[1 - this.activeDeck].audio.pause();
     this.state = 'paused';
     this.emit();
   }
@@ -296,6 +428,8 @@ export class AudioEngine {
       if (this.transition) {
         await this.decks[this.transition.incomingIndex].audio.play();
         this.transition.startedAt += performance.now() - this.pausedAt;
+      } else if (!this.autoMix && this.decks[1 - this.activeDeck].manualPlaying) {
+        await this.decks[1 - this.activeDeck].audio.play();
       }
       this.state = this.pausedFrom;
       this.emit();
@@ -305,8 +439,14 @@ export class AudioEngine {
   }
 
   setAutoMix(enabled) {
+    if (enabled && !this.autoMix && !this.transition && this.currentId && this.decks[1 - this.activeDeck].manualPlaying) this.startManualBlend();
     this.autoMix = Boolean(enabled);
     if (!this.autoMix) this.frozen = false;
+    if (!this.transition && this.currentId && !this.autoMix) this.manualCrossfader = this.activeDeck * 100;
+    if (!this.transition && this.currentId && this.autoMix) {
+      this.decks.forEach((deck, index) => { if (deck.gain) deck.gain.gain.value = index === this.activeDeck ? 1 : 0; });
+      this.manualCrossfader = this.activeDeck * 100;
+    }
     this.say(this.autoMix ? 'AutoMix is on.' : 'AutoMix is off. The current track will end unless you mix next.');
     this.pulse();
   }
@@ -323,11 +463,31 @@ export class AudioEngine {
   }
 
   async mixNext() {
+    if (!this.autoMix && this.decks[1 - this.activeDeck].manualPlaying) return this.startManualBlend();
     if (this.state !== 'playing' || !this.queue.length || this.transitionPending) return false;
     return this.beginTransition(true);
   }
 
-  async beginTransition(manual = false) {
+  startManualBlend() {
+    if (this.transition || this.state !== 'playing') return false;
+    const incomingIndex = 1 - this.activeDeck;
+    const incoming = this.decks[incomingIndex];
+    if (!incoming.trackId || incoming.audio.paused) return false;
+    const position = this.manualCrossfader / 100;
+    const progress = this.activeDeck === 0 ? position : 1 - position;
+    this.transition = { incomingIndex, id: incoming.trackId, duration: 5, startedAt: performance.now(), progress, fromProgress: progress, manualControl: false };
+    this.frozen = true;
+    this.state = 'transitioning';
+    this.say(`Finishing the blend into ${this.tracks.get(incoming.trackId)?.title || 'the other deck'}.`);
+    return true;
+  }
+
+  async skipNext() {
+    if (this.state !== 'playing' || !this.queue.length || this.transitionPending) return false;
+    return this.beginTransition(true, 0.35);
+  }
+
+  async beginTransition(manual = false, requestedDuration = null) {
     if (this.transition || this.transitionPending || this.state !== 'playing' || !this.queue.length) return false;
     this.transitionPending = true;
     const id = this.queue[0];
@@ -348,7 +508,7 @@ export class AudioEngine {
       }
       const outgoing = this.decks[this.activeDeck].audio;
       const remaining = Math.max(.25, outgoing.duration - outgoing.currentTime);
-      const duration = fadeDuration(remaining, incoming.audio.duration || this.tracks.get(id).duration);
+      const duration = requestedDuration === null ? fadeDuration(remaining, incoming.audio.duration || this.tracks.get(id).duration) : Math.max(.25, Math.min(requestedDuration, remaining));
       this.transition = { incomingIndex, id, duration, startedAt: performance.now(), progress: 0, fromProgress: 0, manualControl: false };
       this.frozen = true;
       this.state = 'transitioning';
@@ -368,7 +528,16 @@ export class AudioEngine {
   }
 
   setCrossfader(value) {
-    if (this.state !== 'transitioning' || !this.transition) return;
+    if (!this.transition) {
+      if (this.autoMix) return;
+      this.manualCrossfader = Math.max(0, Math.min(100, value));
+      const [a, b] = equalPowerGains(this.manualCrossfader / 100);
+      if (this.decks[0].gain) this.decks[0].gain.gain.value = a;
+      if (this.decks[1].gain) this.decks[1].gain.gain.value = b;
+      this.emit();
+      return;
+    }
+    if (this.state !== 'transitioning') return;
     this.transition.manualControl = true;
     const position = Math.max(0, Math.min(1, value / 100));
     this.transition.progress = this.activeDeck === 0 ? position : 1 - position;
@@ -418,6 +587,7 @@ export class AudioEngine {
     this.frozen = false;
     this.clearDeck(outgoing);
     this.decks[this.activeDeck].gain.gain.value = 1;
+    this.manualCrossfader = this.activeDeck * 100;
     this.state = 'playing';
     this.emit();
   }
@@ -428,9 +598,24 @@ export class AudioEngine {
       void this.onDeckEnded(this.activeDeck);
       return;
     }
+    if (!this.autoMix && index !== this.activeDeck) { this.decks[index].manualPlaying = false; this.emit(); return; }
     if (index !== this.activeDeck || this.state === 'paused' || !this.currentId) return;
     if (this.transition) {
       this.finishTransition();
+      return;
+    }
+    if (!this.autoMix && !this.decks[1 - index].audio.paused) {
+      const incoming = 1 - index;
+      const id = this.decks[incoming].trackId;
+      this.clearDeck(index);
+      this.activeDeck = incoming;
+      this.currentId = id;
+      this.queue = this.queue.filter((item) => item !== id);
+      this.preparedId = null;
+      this.preparedState = 'empty';
+      this.manualCrossfader = incoming * 100;
+      this.setCrossfader(this.manualCrossfader);
+      this.emit();
       return;
     }
     if (this.endAdvancePending) return;
